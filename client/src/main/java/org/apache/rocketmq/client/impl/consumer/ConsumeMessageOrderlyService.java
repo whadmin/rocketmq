@@ -144,7 +144,7 @@ public class ConsumeMessageOrderlyService implements ConsumeMessageService {
 
         final long beginTime = System.currentTimeMillis();
 
-        log.info("consumeMessageDirectly receive new message: {}", msg);
+        log.info("consumeMessageDirectly receive new messge: {}", msg);
 
         try {
             ConsumeOrderlyStatus status = this.messageListener.consumeMessage(msgs, context);

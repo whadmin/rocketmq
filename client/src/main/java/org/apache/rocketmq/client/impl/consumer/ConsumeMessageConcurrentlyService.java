@@ -161,7 +161,7 @@ public class ConsumeMessageConcurrentlyService implements ConsumeMessageService 
 
         final long beginTime = System.currentTimeMillis();
 
-        log.info("consumeMessageDirectly receive new message: {}", msg);
+        log.info("consumeMessageDirectly receive new messge: {}", msg);
 
         try {
             ConsumeConcurrentlyStatus status = this.messageListener.consumeMessage(msgs, context);
