@@ -27,6 +27,10 @@ import org.junit.Test;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class RemotingCommandTest {
+
+    /**
+     * 测试编码 序列化类型&消息头长度
+     */
     @Test
     public void testMarkProtocolType_JSONProtocolType() {
         int source = 261;
@@ -35,6 +39,9 @@ public class RemotingCommandTest {
         assertThat(result).isEqualTo(new byte[] {0, 0, 1, 5});
     }
 
+    /**
+     * 测试编码 序列化类型&消息头长度
+     */
     @Test
     public void testMarkProtocolType_ROCKETMQProtocolType() {
         int source = 16777215;

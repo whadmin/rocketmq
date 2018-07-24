@@ -82,6 +82,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
 
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<List<String>>();
+    /**当前客户端正在连接的服务端的地址 **/
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
     private final Lock lockNamesrvChannel = new ReentrantLock();
@@ -190,6 +191,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        //客户端定时任务执行
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
@@ -239,34 +241,47 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+
+    /**
+     * 关闭
+     * @param addr  服务器的地址
+     * @param channel  客户端和服务器连接NioSocketChannel
+     */
     public void closeChannel(final String addr, final Channel channel) {
+        //关闭和服务器的连接NioSocketChannel 不能为null
         if (null == channel)
             return;
 
+        //当服务器地址为null == addr 从NioSocketChannel获取远程服务器的地址
         final String addrRemote = null == addr ? RemotingHelper.parseChannelRemoteAddr(channel) : addr;
 
         try {
+            //关闭连接需要加锁
             if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
                     boolean removeItemFromTable = true;
+                    //从channelTables 通过服务器地址，获取连接对象ChannelWrapper
                     final ChannelWrapper prevCW = this.channelTables.get(addrRemote);
 
                     log.info("closeChannel: begin close the channel[{}] Found: {}", addrRemote, prevCW != null);
 
+                    //不存在则说明不存在针对这个服务器地址的连接
                     if (null == prevCW) {
                         log.info("closeChannel: the channel[{}] has been removed from the channel table before", addrRemote);
                         removeItemFromTable = false;
-                    } else if (prevCW.getChannel() != channel) {
+                    }
+                    //关闭的的连接和客户端保存的连接对象不一致
+                    else if (prevCW.getChannel() != channel) {
                         log.info("closeChannel: the channel[{}] has been closed before, and has been created again, nothing to do.",
                             addrRemote);
                         removeItemFromTable = false;
                     }
-
+                    //从channelTables删除此地址的连接对象
                     if (removeItemFromTable) {
                         this.channelTables.remove(addrRemote);
                         log.info("closeChannel: the channel[{}] was removed from channel table", addrRemote);
                     }
-
+                    //关闭连接
                     RemotingUtil.closeChannel(channel);
                 } catch (Exception e) {
                     log.error("closeChannel: close the channel exception", e);
@@ -357,16 +372,33 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
     }
 
+
+    /**
+     * invokeSync 表示客户端向服务端发起请求
+     *
+     * @param addr  请求服务端地址  localhost:8888
+     * @param request  netty 请求IO对象
+     * @param timeoutMillis  超时时间
+     * @return
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingSendRequestException
+     * @throws RemotingTimeoutException
+     */
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
+        //针对指定地址的服务器，客户端发起连接获取NioSocketChannel
         final Channel channel = this.getAndCreateChannel(addr);
+        //判断NioSocketChannel 是否连接正常，正常则发送请求给服务端
         if (channel != null && channel.isActive()) {
             try {
+                //可以给NettyRemotingClient设置钩子对象，用来同步调用前做一些处理
                 if (this.rpcHook != null) {
                     this.rpcHook.doBeforeRequest(addr, request);
                 }
                 RemotingCommand response = this.invokeSyncImpl(channel, request, timeoutMillis);
+                //可以给NettyRemotingClient设置钩子对象，用来同步调用后做一些处理
                 if (this.rpcHook != null) {
                     this.rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(channel), request, response);
                 }
@@ -376,6 +408,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 this.closeChannel(addr, channel);
                 throw e;
             } catch (RemotingTimeoutException e) {
+                //当nettyClientConfig.isClientCloseSocketIfTimeout()设置为true 客户端发送数据超时，则关闭此NioSocketChannel连接
                 if (nettyClientConfig.isClientCloseSocketIfTimeout()) {
                     this.closeChannel(addr, channel);
                     log.warn("invokeSync: close socket because of timeout, {}ms, {}", timeoutMillis, addr);
@@ -383,36 +416,61 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 log.warn("invokeSync: wait response timeout exception, the channel[{}]", addr);
                 throw e;
             }
-        } else {
+        }
+        //NioSocketChannel 连接被关闭
+        else {
             this.closeChannel(addr, channel);
             throw new RemotingConnectException(addr);
         }
     }
 
+    /**
+     * @param addr 请求服务端地址 localhost:8888
+     * @return  服务端连接NioSocketChannel
+     * @throws InterruptedException
+     */
     private Channel getAndCreateChannel(final String addr) throws InterruptedException {
+        //客户端连接服务端时,并没有明确传递要连接服务器地址时,客户端从本地缓存连接过的服务器地址集合对象namesrvAddrList中选举出一个默认的服务端地址设置到对象namesrvAddrChoosed,并对此地址服务器重新连接，返回NioSocketChannel.
         if (null == addr)
             return getAndCreateNameserverChannel();
 
+        //判断连接的地址，是否存在于channelTables中，每当客户端和服务器连接都会把服务器地址作为key,连接对象ChannelWrapper（NioSocketChannel对象的封装）作为value保存到channelTables中
+        //如果存且连接对象ChannelWrapper正常直接返回
         ChannelWrapper cw = this.channelTables.get(addr);
         if (cw != null && cw.isOK()) {
             return cw.getChannel();
         }
-
+        //不存在于channelTables中，获取连接已经中断，则需要调用createChannel重新对addr地址的服务器发起连接。
         return this.createChannel(addr);
     }
 
+
+    /**
+     * 客户端连接服务端时,并没有明确传递要连接服务器地址时,
+     * 客户端从本地缓存连接过的服务器地址集合对象namesrvAddrList中选举出一个默认的服务端地址设置到对象namesrvAddrChoosed,
+     * 并对此地址服务器重新连接，返回NioSocketChannel.
+     *
+     * @return 服务端连接NioSocketChannel
+     * @throws InterruptedException
+     */
     private Channel getAndCreateNameserverChannel() throws InterruptedException {
+        //从namesrvAddrChoosed 获取默认的服务器的地址。
         String addr = this.namesrvAddrChoosed.get();
         if (addr != null) {
+            //从channelTables Map对象中中获取，这个默认地址的连接对象的ChannelWrapper（NioSocketChannel对象的封装）
             ChannelWrapper cw = this.channelTables.get(addr);
+            //判断默认地址的连接对象的ChannelWrapper中NioSocketChannel连接是否正常。如果ChannelWrapper中NioSocketChannel连接正常返回当前连接的NioSocketChannel.
             if (cw != null && cw.isOK()) {
                 return cw.getChannel();
             }
         }
 
+        //如果客户端还没有设置默认服务器地址，则需要客户端从本地缓存连接过的服务器地址集合对象namesrvAddrList中选举出一个默认的服务端地址.
         final List<String> addrList = this.namesrvAddrList.get();
+        //选举过程中需要加锁防止其他线程干扰.
         if (this.lockNamesrvChannel.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
             try {
+                //在校验下namesrvAddrChoosed中是否存在默认地址，并连接正常
                 addr = this.namesrvAddrChoosed.get();
                 if (addr != null) {
                     ChannelWrapper cw = this.channelTables.get(addr);
@@ -420,16 +478,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                         return cw.getChannel();
                     }
                 }
-
+                //通过namesrvIndex计数器累加  % addrList.size() 求得一个连接过的地址，
                 if (addrList != null && !addrList.isEmpty()) {
                     for (int i = 0; i < addrList.size(); i++) {
                         int index = this.namesrvIndex.incrementAndGet();
                         index = Math.abs(index);
                         index = index % addrList.size();
                         String newAddr = addrList.get(index);
-
+                        //设置选举出来了服务地址为默认连接的服务器地址
                         this.namesrvAddrChoosed.set(newAddr);
                         log.info("new name server is chosen. OLD: {} , NEW: {}. namesrvIndex = {}", addr, newAddr, namesrvIndex);
+                        //针对默认的服务器地址进行重新连接
                         Channel channelNew = this.createChannel(newAddr);
                         if (channelNew != null)
                             return channelNew;
@@ -448,32 +507,42 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     }
 
     private Channel createChannel(final String addr) throws InterruptedException {
+        //判断连接的地址，是否存在于channelTables中，每当客户端和服务器连接都会把服务器地址作为key,连接对象ChannelWrapper（NioSocketChannel对象的封装）作为value保存到channelTables中
+        //如果存且连接对象ChannelWrapper正常直接返回
         ChannelWrapper cw = this.channelTables.get(addr);
         if (cw != null && cw.isOK()) {
             cw.getChannel().close();
             channelTables.remove(addr);
         }
-
+        //连接过程中需要加锁防止其他线程干扰.
         if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
             try {
                 boolean createNewConnection;
+                //从channelTables中获取该地址对应的ChannelWrapper连接对象
                 cw = this.channelTables.get(addr);
+                //cw!=null 说明此地址服务器客户端连接过
                 if (cw != null) {
-
+                    //cw.isOK() 表示存在一个和此地址连接正常的hannelWrapper连接对象
                     if (cw.isOK()) {
+                        //关闭此连接
                         cw.getChannel().close();
+                        //从channelTables中删除此地址的连接
                         this.channelTables.remove(addr);
                         createNewConnection = true;
-                    } else if (!cw.getChannelFuture().isDone()) {
+                    }
+                    //!cw.getChannelFuture().isDone() 表示客户端发起连接服务端一直没有响应
+                    else if (!cw.getChannelFuture().isDone()) {
                         createNewConnection = false;
-                    } else {
+                    }
+                    //连接失败
+                    else {
                         this.channelTables.remove(addr);
                         createNewConnection = true;
                     }
                 } else {
                     createNewConnection = true;
                 }
-
+                //发起一个新连接将连接ChannelFuture对象设置到ChannelWrapper对象属性中，channelTables中添加新连接地址和连接对象ChannelWrapper
                 if (createNewConnection) {
                     ChannelFuture channelFuture = this.bootstrap.connect(RemotingHelper.string2SocketAddress(addr));
                     log.info("createChannel: begin to connect remote host[{}] asynchronously", addr);
@@ -490,8 +559,11 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         }
 
         if (cw != null) {
+            //获取连接结果对象 ChannelFuture
             ChannelFuture channelFuture = cw.getChannelFuture();
+            //等待nettyClientConfig.getConnectTimeoutMillis()时间，等待连接是否获得服务端的响应，
             if (channelFuture.awaitUninterruptibly(this.nettyClientConfig.getConnectTimeoutMillis())) {
+                //判断连接是否完成。完成则返回
                 if (cw.isOK()) {
                     log.info("createChannel: connect remote host[{}] success, {}", addr, channelFuture.toString());
                     return cw.getChannel();

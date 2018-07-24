@@ -32,18 +32,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class RemotingCommand {
+
+    private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
+
     public static final String SERIALIZE_TYPE_PROPERTY = "rocketmq.serialize.type";
     public static final String SERIALIZE_TYPE_ENV = "ROCKETMQ_SERIALIZE_TYPE";
     public static final String REMOTING_VERSION_KEY = "rocketmq.remoting.version";
-    private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
-    private static final int RPC_TYPE = 0; // 0, REQUEST_COMMAND
-    private static final int RPC_ONEWAY = 1; // 0, RPC
+
+    /**
+     * rpc类型的标注，一种是普通的RPC请求{请求等待回应}
+     */
+    private static final int RPC_TYPE = 0;
+    /**
+     * rpc类型的标注，一种是单向RPC请求{请求无须回应}
+     */
+    private static final int RPC_ONEWAY = 1;
+
+    /**
+     * CommandCustomHader是所有 headerdata【协议头数据】都要实现的接口，后面的Field[]就是对应的headerdata实现接口类的成员属性
+     * map就是解析时候的不同CommandCustomHader之类对应属性的数据字典
+     */
     private static final Map<Class<? extends CommandCustomHeader>, Field[]> CLASS_HASH_MAP =
-        new HashMap<Class<? extends CommandCustomHeader>, Field[]>();
+            new HashMap<Class<? extends CommandCustomHeader>, Field[]>();
+
     private static final Map<Class, String> CANONICAL_NAME_CACHE = new HashMap<Class, String>();
-    // 1, Oneway
-    // 1, RESPONSE_COMMAND
+
     private static final Map<Field, Boolean> NULLABLE_FIELD_CACHE = new HashMap<Field, Boolean>();
+
+
     private static final String STRING_CANONICAL_NAME = String.class.getCanonicalName();
     private static final String DOUBLE_CANONICAL_NAME_1 = Double.class.getCanonicalName();
     private static final String DOUBLE_CANONICAL_NAME_2 = double.class.getCanonicalName();
@@ -53,8 +69,67 @@ public class RemotingCommand {
     private static final String LONG_CANONICAL_NAME_2 = long.class.getCanonicalName();
     private static final String BOOLEAN_CANONICAL_NAME_1 = Boolean.class.getCanonicalName();
     private static final String BOOLEAN_CANONICAL_NAME_2 = boolean.class.getCanonicalName();
+
     private static volatile int configVersion = -1;
+    /**
+     * 这里的requestId是RPC请求的序号，每次请求的时候都会increment一下
+     *
+     */
     private static AtomicInteger requestId = new AtomicInteger(0);
+    private int opaque = requestId.getAndIncrement();
+
+    /**
+     * 请求或响应代码
+     *
+     * Request:  请求方会根据不同code 表示不同的请求操作。
+     * Response: code=0 表示成功,非0表示不同类型错误代码
+     */
+    private int code;
+
+
+    /**
+     *区分语言种类
+     * Request:  请求方默认的实现语言。 默认JAVA
+     * Response: 响应方默认的实现语言。 默认JAVA
+     */
+    private LanguageCode language = LanguageCode.JAVA;
+
+    /**
+     * RPC版本号
+     */
+    private int version = 0;
+
+    /**
+     * rpc类型的标注，RPC_TYPE或者RPC_ONEWAY
+     */
+    private int flag = 0;
+
+    /**
+     * 标注信息
+     */
+    private String remark;
+
+    /**
+     * 存放本次RPC通信中所有的extFeilds，extFeilds其实就可以理解成本次通信CommandCustomHeader实现Map存储格式
+     */
+    private HashMap<String, String> extFields;
+
+    /**
+     * 包头数据，注意transient标记，不会被序列化
+     */
+    private transient CommandCustomHeader customHeader;
+
+    /**
+     * body data 数据包数据
+     */
+    private transient byte[] body;
+
+    /**
+     * 序列化的方式，JSON 或者 ROCKETMQ
+     *
+     */
+    private SerializeType serializeTypeCurrentRPC = serializeTypeConfigInThisServer;
+
 
     private static SerializeType serializeTypeConfigInThisServer = SerializeType.JSON;
 
@@ -68,19 +143,6 @@ public class RemotingCommand {
             }
         }
     }
-
-    private int code;
-    private LanguageCode language = LanguageCode.JAVA;
-    private int version = 0;
-    private int opaque = requestId.getAndIncrement();
-    private int flag = 0;
-    private String remark;
-    private HashMap<String, String> extFields;
-    private transient CommandCustomHeader customHeader;
-
-    private SerializeType serializeTypeCurrentRPC = serializeTypeConfigInThisServer;
-
-    private transient byte[] body;
 
     protected RemotingCommand() {
     }
