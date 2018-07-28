@@ -227,10 +227,22 @@ public class MixAll {
         return null;
     }
 
+
+    /**
+     * 将object 对象的属性打印到Logger 中
+     * @param logger
+     * @param object
+     */
     public static void printObjectProperties(final Logger logger, final Object object) {
         printObjectProperties(logger, object, false);
     }
 
+    /**
+     * 将object 对象的属性打印到Logger 中
+     * @param logger
+     * @param object
+     * @param onlyImportantField  为true表示仅仅打印存在ImportantField注解的属性
+     */
     public static void printObjectProperties(final Logger logger, final Object object,
         final boolean onlyImportantField) {
         Field[] fields = object.getClass().getDeclaredFields();
@@ -265,6 +277,12 @@ public class MixAll {
         }
     }
 
+
+    /**
+     * properties 转String
+     * @param properties
+     * @return
+     */
     public static String properties2String(final Properties properties) {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<Object, Object> entry : properties.entrySet()) {
@@ -275,6 +293,12 @@ public class MixAll {
         return sb.toString();
     }
 
+
+    /**
+     * String 转properties
+     * @param str
+     * @return
+     */
     public static Properties string2Properties(final String str) {
         Properties properties = new Properties();
         try {
@@ -314,6 +338,11 @@ public class MixAll {
         return properties;
     }
 
+    /**
+     * 将Properties 中的值赋值给 Object
+     * @param p
+     * @param object
+     */
     public static void properties2Object(final Properties p, final Object object) {
         Method[] methods = object.getClass().getMethods();
         for (Method method : methods) {

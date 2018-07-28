@@ -39,7 +39,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NamesrvStartup {
+    //根据启动参数指定的配置文件解析得到的prop
     public static Properties properties = null;
+    //根据args解析出来的CommandLine(CommandLine是apache CLI提供的功能）
     public static CommandLine commandLine = null;
 
     public static void main(String[] args) {
@@ -47,20 +49,43 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController main0(String[] args) {
+        // 设置版本号[rocketmq.remoting.version -> MQVersion.CURRENT_VERSION]
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         try {
+            // FastJson版本冲突检测，已被注释
             //PackageConflictDetect.detectFastjson();
 
+            /**
+             * 构造org.apache.commons.cli.Options
+             * 并且添加-h -n参数
+             * -h 打印帮助信息
+             * -h 指定Name Server地址
+             */
             Options options = ServerUtil.buildCommandlineOptions(new Options());
+
+
+            /**
+             * 使用org.apache.commons.cli.PosixParser解析器和构造Options命令模板解析args得到 commandLine
+             * buildCommandlineOptions 在Options中添加-c -p参数
+             * -c 指定Name Server配置文件
+             * -p 打印配置信息
+             */
             commandLine = ServerUtil.parseCmdLine("mqnamesrv", args, buildCommandlineOptions(options), new PosixParser());
             if (null == commandLine) {
                 System.exit(-1);
                 return null;
             }
-
+            // 初始化NamesrvConfig和NettyServerConfig
             final NamesrvConfig namesrvConfig = new NamesrvConfig();
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+
+            // Name Server的端口定为9876
             nettyServerConfig.setListenPort(9876);
+
+            /**
+             * 如果命令带有-c参数，则读取指定Name Server配置文件文件内容，转换成全局Properties
+             * 通过反射，将Properties中的值赋值给NamesrvConfig、NettyServerConfig
+             */
             if (commandLine.hasOption('c')) {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
@@ -77,19 +102,32 @@ public class NamesrvStartup {
                 }
             }
 
+            // 如果命令带有-p参数，则打印出NamesrvConfig、NettyServerConfig的属性,这里logger为null
             if (commandLine.hasOption('p')) {
                 MixAll.printObjectProperties(null, namesrvConfig);
                 MixAll.printObjectProperties(null, nettyServerConfig);
                 System.exit(0);
             }
 
+            /**
+             * 解析命令行参数，并加载到namesrvConfig配置中
+             * 通过debug发现，这一行在这里没用
+             * commandLine2Properties()方法中将参数全名和属性值转换成Properties
+             * 目前支持的参数的全名为configFile、help、namesrvAddr、printConfigItem
+             * 但是NamesrvConfig类中没有与之对应的set方法，所以不知道意义何在
+             */
             MixAll.properties2Object(ServerUtil.commandLine2Properties(commandLine), namesrvConfig);
 
+            // 判断ROCKETMQ_HOME不能为空
             if (null == namesrvConfig.getRocketmqHome()) {
                 System.out.printf("Please set the %s variable in your environment to match the location of the RocketMQ installation%n", MixAll.ROCKETMQ_HOME_ENV);
                 System.exit(-2);
             }
 
+            /**
+             * 初始化Logback日志工厂
+             * RocketMQ默认使用Logback作为日志输出
+             */
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
             configurator.setContext(lc);
@@ -97,20 +135,30 @@ public class NamesrvStartup {
             configurator.doConfigure(namesrvConfig.getRocketmqHome() + "/conf/logback_namesrv.xml");
             final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+            //将namesrvConfig,nettyServerConfig 对象的属性打印到Logger 中
             MixAll.printObjectProperties(log, namesrvConfig);
             MixAll.printObjectProperties(log, nettyServerConfig);
 
+            /**
+             * 初始化NamesrvController
+             * 该类是Name Server的主要控制类
+             */
             final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
-            // remember all configs to prevent discard
+            /**
+             * remember all configs to prevent discard
+             * 将全局Properties的内容复制到NamesrvController.Configuration.allConfigs中
+             */
             controller.getConfiguration().registerConfig(properties);
 
+            // 初始化NamesrvController
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);
             }
 
+            // 注册ShutdownHook
             Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
                 @Override
                 public Void call() throws Exception {
@@ -119,6 +167,7 @@ public class NamesrvStartup {
                 }
             }));
 
+            // 启动Netty服务
             controller.start();
 
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
@@ -134,6 +183,11 @@ public class NamesrvStartup {
         return null;
     }
 
+    /**
+     * Options中添加-c -p参数
+     * -c 指定Name Server配置文件
+     * -p 打印配置信息
+     */
     public static Options buildCommandlineOptions(final Options options) {
         Option opt = new Option("c", "configFile", true, "Name server config properties file");
         opt.setRequired(false);

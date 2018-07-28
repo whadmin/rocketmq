@@ -26,6 +26,12 @@ import org.apache.commons.cli.ParseException;
 
 public class ServerUtil {
 
+    /**
+     * 构造org.apache.commons.cli.Options
+     * 并且添加-h -n参数
+     * -h 打印帮助信息
+     * -h 指定Name Server地址
+     */
     public static Options buildCommandlineOptions(final Options options) {
         Option opt = new Option("h", "help", false, "Print help");
         opt.setRequired(false);
@@ -64,6 +70,12 @@ public class ServerUtil {
         hf.printHelp(appName, options, true);
     }
 
+
+    /**
+     * commandLine 转  Properties
+     * @param commandLine
+     * @return
+     */
     public static Properties commandLine2Properties(final CommandLine commandLine) {
         Properties properties = new Properties();
         Option[] opts = commandLine.getOptions();

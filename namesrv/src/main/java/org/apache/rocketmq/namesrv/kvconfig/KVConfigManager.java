@@ -30,11 +30,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class KVConfigManager {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
 
+    // Name Server主要控制类
     private final NamesrvController namesrvController;
-
+    // 读写锁
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+
+    /**
+     * 以命名空间为单位存储的配置文件，存数示例如下：
+     * {"configTable":{"ORDER_TOPIC_CONFIG":{"UnitTest":"test"}}}%
+     * 此处的Namespace为ORDER_TOPIC_CONFIG，暂时不知道Namespace具体的含义
+     */
     private final HashMap<String/* Namespace */, HashMap<String/* Key */, String/* Value */>> configTable =
         new HashMap<String, HashMap<String, String>>();
 
@@ -42,6 +50,10 @@ public class KVConfigManager {
         this.namesrvController = namesrvController;
     }
 
+
+    /**
+     * 通过NamesrvConfig配置的KV配置文件路径，读取KV配置文件信息解析设置到configTable属性
+     */
     public void load() {
         String content = null;
         try {
@@ -59,6 +71,12 @@ public class KVConfigManager {
         }
     }
 
+    /**
+     * 添加一个KV配置
+     * @param namespace
+     * @param key
+     * @param value
+     */
     public void putKVConfig(final String namespace, final String key, final String value) {
         try {
             this.lock.writeLock().lockInterruptibly();
@@ -88,6 +106,10 @@ public class KVConfigManager {
         this.persist();
     }
 
+
+    /**
+     * configTable 持久到配置文件中
+     */
     public void persist() {
         try {
             this.lock.readLock().lockInterruptibly();
@@ -112,6 +134,11 @@ public class KVConfigManager {
 
     }
 
+    /**
+     * 删除一个KV配置
+     * @param namespace
+     * @param key
+     */
     public void deleteKVConfig(final String namespace, final String key) {
         try {
             this.lock.writeLock().lockInterruptibly();
@@ -132,6 +159,12 @@ public class KVConfigManager {
         this.persist();
     }
 
+
+    /**
+     * 获取namespace 下所有配置 编码byte[]返回
+     * @param namespace
+     * @return
+     */
     public byte[] getKVListByNamespace(final String namespace) {
         try {
             this.lock.readLock().lockInterruptibly();
@@ -152,6 +185,11 @@ public class KVConfigManager {
         return null;
     }
 
+    /**
+     * 获取namespace,key配置
+     * @param namespace
+     * @param key
+     */
     public String getKVConfig(final String namespace, final String key) {
         try {
             this.lock.readLock().lockInterruptibly();
@@ -170,6 +208,9 @@ public class KVConfigManager {
         return null;
     }
 
+    /**
+     * 打印所有配置
+     */
     public void printAllPeriodically() {
         try {
             this.lock.readLock().lockInterruptibly();

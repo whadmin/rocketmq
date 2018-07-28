@@ -28,10 +28,24 @@ import org.slf4j.LoggerFactory;
 
 public class NamesrvConfig {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
-
+    /**
+     * RocketMQ安装目录
+     * 如果没有指定的话，默认值为系统环境变量ROCKETMQ_HOME
+     * 通过System.getenv获取，可以在~/.profile中export
+     * 或者可以在配置文件中指定rocketmqHome=***
+     */
     private String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY, System.getenv(MixAll.ROCKETMQ_HOME_ENV));
+    /**
+     * KV配置持久化地址
+     * 默认为System.getProperty("user.home")/namesrv/kvConfig.json文件
+     */
     private String kvConfigPath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "kvConfig.json";
+    /**
+     * 持久化配置路径
+     * 默认为System.getProperty("user.home")/namesrv/namesrv.properties文件
+     */
     private String configStorePath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "namesrv.properties";
+
     private String productEnvName = "center";
     private boolean clusterTest = false;
     private boolean orderMessageEnable = false;

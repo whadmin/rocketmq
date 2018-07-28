@@ -48,11 +48,17 @@ import org.slf4j.LoggerFactory;
 public class RouteInfoManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
     private final static long BROKER_CHANNEL_EXPIRED_TIME = 1000 * 60 * 2;
+    // 读写锁
     private final ReadWriteLock lock = new ReentrantReadWriteLock();
+    // Topic，以及对应的队列信息
     private final HashMap<String/* topic */, List<QueueData>> topicQueueTable;
+    // 以Broker Name为单位的Broker集合 互为主从Broker 名称相同
     private final HashMap<String/* brokerName */, BrokerData> brokerAddrTable;
+    // 集群以及属于该进群的Broker列表
     private final HashMap<String/* clusterName */, Set<String/* brokerName */>> clusterAddrTable;
+    // 存活的Broker地址列表
     private final HashMap<String/* brokerAddr */, BrokerLiveInfo> brokerLiveTable;
+    // Broker对应的Filter Server列表
     private final HashMap<String/* brokerAddr */, List<String>/* Filter Server */> filterServerTable;
 
     public RouteInfoManager() {
