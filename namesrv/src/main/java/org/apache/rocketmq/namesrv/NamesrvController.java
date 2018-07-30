@@ -71,16 +71,19 @@ public class NamesrvController {
     }
 
     public boolean initialize() {
-
+        // 从kvConfigPath加载文件内容至KVConfigManager
         this.kvConfigManager.load();
-
+        // 初始化RemotingServer
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
-
+        // workerThread线程池，默认线程数为8
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
-
+        // 注册Netty处理逻辑
         this.registerProcessor();
-
+        /**
+         * 延迟5秒启动、每10秒执行一次的定时任务
+         * 用于扫描不存活的Broker
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -88,7 +91,10 @@ public class NamesrvController {
                 NamesrvController.this.routeInfoManager.scanNotActiveBroker();
             }
         }, 5, 10, TimeUnit.SECONDS);
-
+        /**
+         * 延迟1分钟启动、每10分钟执行一次的定时任务
+         * 作用式打印出kvConfig配置
+         */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -100,6 +106,7 @@ public class NamesrvController {
         return true;
     }
 
+    // 注册Netty处理逻辑
     private void registerProcessor() {
         if (namesrvConfig.isClusterTest()) {
 

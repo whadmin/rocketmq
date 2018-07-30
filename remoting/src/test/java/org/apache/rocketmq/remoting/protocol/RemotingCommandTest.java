@@ -60,6 +60,8 @@ public class RemotingCommandTest {
         assertThat(cmd.getCode()).isEqualTo(code);
         assertThat(cmd.getVersion()).isEqualTo(2333);
         assertThat(cmd.getFlag() & 0x01).isEqualTo(0); //flag bit 0: 0 presents request
+        cmd.markOnewayRPC();
+        assertThat(cmd.getFlag() & 0x01).isEqualTo(3);
     }
 
     @Test
@@ -73,6 +75,8 @@ public class RemotingCommandTest {
         assertThat(cmd.getVersion()).isEqualTo(2333);
         assertThat(cmd.getRemark()).isEqualTo(remark);
         assertThat(cmd.getFlag() & 0x01).isEqualTo(1); //flag bit 0: 1 presents response
+        cmd.markOnewayRPC();
+        assertThat(cmd.getFlag() & 0x01).isEqualTo(3);
     }
 
     @Test
@@ -86,6 +90,8 @@ public class RemotingCommandTest {
         assertThat(cmd.getVersion()).isEqualTo(2333);
         assertThat(cmd.getRemark()).isEqualTo(remark);
         assertThat(cmd.getFlag() & 0x01).isEqualTo(1); //flag bit 0: 1 presents response
+        cmd.markOnewayRPC();
+        assertThat(cmd.getFlag() & 0x01).isEqualTo(3);
     }
 
     @Test

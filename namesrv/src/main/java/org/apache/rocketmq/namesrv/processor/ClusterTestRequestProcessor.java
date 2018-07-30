@@ -36,7 +36,7 @@ public class ClusterTestRequestProcessor extends DefaultRequestProcessor {
     private final DefaultMQAdminExt adminExt;
     private final String productEnvName;
 
-    public ClusterTestRequestProcessor(NamesrvController namesrvController, String productEnvName) {
+    public    ClusterTestRequestProcessor(NamesrvController namesrvController, String productEnvName) {
         super(namesrvController);
         this.productEnvName = productEnvName;
         adminExt = new DefaultMQAdminExt();

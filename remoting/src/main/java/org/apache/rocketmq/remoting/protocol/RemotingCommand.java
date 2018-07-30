@@ -31,6 +31,23 @@ import org.apache.rocketmq.remoting.exception.RemotingCommandException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * <length> <header length> <header data> <body data>
+ * 服务器与客户端通过传递 如上协议进行交互，
+ *
+  length：4个字节的int型数据，用来存储header length、header data、body data的总和，也就是网络传输包的数据总长
+  header length：4个字节的int型数据，前一个字节用存储序列号类型  在MQ中序列话的对象是RemotingCommand 我们会把RemotingCommand序列化为2进制存储到header data中
+  序列化的方式有2种，一种是JSON 一种是ROCKETMQ  后3个字节用来存储header data的长度。
+  这里有点难以理解点在于RemotingCommand描述的是header data对象。但其中还存在body,customHeader属性
+  这样RemotingCommand不仅仅描述了header data 同时也包含了body data，当我们在encode()的时候 可以认为 header data 》 body data  body data还必须存在于RemotingCommand属性中
+  header data：存储报文头部的数据
+  body data：存储报文体的数据  一个2进制
+ *
+ * RemotingCommand  encode()行为是针对RemotingCommand 编码为<length> <header length> <header data> <body data> 格式的二进制包
+ *
+ * RemotingCommand decode行为只针对 <header length> <header data> <body data> 格式解码。因为
+ * NettyDecoder extends LengthFieldBasedFrameDecoder 帮我们解析的时候去掉了 <length>
+ */
 public class RemotingCommand {
 
     private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
@@ -40,11 +57,11 @@ public class RemotingCommand {
     public static final String REMOTING_VERSION_KEY = "rocketmq.remoting.version";
 
     /**
-     * rpc类型的标注，一种是普通的RPC请求{请求等待回应}
+     * rpc类型的标注，一种是普通的RPC请求{请求等待回应} 请求类型为RPC_TYPE 这里的0 表示2的0次方
      */
     private static final int RPC_TYPE = 0;
     /**
-     * rpc类型的标注，一种是单向RPC请求{请求无须回应}
+     * rpc类型的标注，一种是单向RPC请求{请求无须回应} 返回类型或者无需应答的为 这里的1 表示2的1次方
      */
     private static final int RPC_ONEWAY = 1;
 
@@ -100,7 +117,7 @@ public class RemotingCommand {
     private int version = 0;
 
     /**
-     * rpc类型的标注，RPC_TYPE或者RPC_ONEWAY
+     * 0 一种是普通的RPC request类型{请求等待回应}  1 3 表示Response类型{无须回应}  2  一种是单向RPC请求{请求无须回应}
      */
     private int flag = 0;
 
@@ -147,14 +164,11 @@ public class RemotingCommand {
     protected RemotingCommand() {
     }
 
-    public static RemotingCommand createRequestCommand(int code, CommandCustomHeader customHeader) {
-        RemotingCommand cmd = new RemotingCommand();
-        cmd.setCode(code);
-        cmd.customHeader = customHeader;
-        setCmdVersion(cmd);
-        return cmd;
-    }
-
+    /**
+     * 从configVersion，System.getProperty(REMOTING_VERSION_KEY) 获取版本号
+     * 设置到 RemotingCommand version
+     * @param cmd
+     */
     private static void setCmdVersion(RemotingCommand cmd) {
         if (configVersion >= 0) {
             cmd.setVersion(configVersion);
@@ -168,10 +182,53 @@ public class RemotingCommand {
         }
     }
 
+    /**
+     * 创建一个Request类型的 RemotingCommand
+     * headerdata 对象类型为 classHeader,
+     * code Request类型编码为 code
+     * @param code
+     * @param customHeader
+     * @return
+     */
+    public static RemotingCommand createRequestCommand(int code, CommandCustomHeader customHeader) {
+        RemotingCommand cmd = new RemotingCommand();
+        cmd.setCode(code);
+        cmd.customHeader = customHeader;
+        setCmdVersion(cmd);
+        return cmd;
+    }
+
+    /**
+     * 创建一个返回类型的 RemotingCommand
+     * headerdata 对象类型为 classHeader,
+     * code 返回编码为 RemotingSysResponseCode.SYSTEM_ERROR
+     * remark 备注为  "not set any response code"
+     * @param classHeader
+     * @return
+     */
     public static RemotingCommand createResponseCommand(Class<? extends CommandCustomHeader> classHeader) {
         return createResponseCommand(RemotingSysResponseCode.SYSTEM_ERROR, "not set any response code", classHeader);
     }
 
+    /**
+     * 创建一个Response类型的 RemotingCommand
+     * headerdata 对象类型为 null
+     * code 返回编码为 code
+     * remark 备注为  remark
+     * @param code  请求编
+     * @param remark  备注
+     * @return
+     */
+    public static RemotingCommand createResponseCommand(int code, String remark) {
+        return createResponseCommand(code, remark, null);
+    }
+
+    /**
+     * 创建一个Response类型类型的 RemotingCommand
+     * @param remark
+     * @param classHeader
+     * @return
+     */
     public static RemotingCommand createResponseCommand(int code, String remark,
         Class<? extends CommandCustomHeader> classHeader) {
         RemotingCommand cmd = new RemotingCommand();
@@ -194,40 +251,23 @@ public class RemotingCommand {
         return cmd;
     }
 
-    public static RemotingCommand createResponseCommand(int code, String remark) {
-        return createResponseCommand(code, remark, null);
-    }
 
-    public static RemotingCommand decode(final byte[] array) {
-        ByteBuffer byteBuffer = ByteBuffer.wrap(array);
-        return decode(byteBuffer);
-    }
-
-    public static RemotingCommand decode(final ByteBuffer byteBuffer) {
-        int length = byteBuffer.limit();
-        int oriHeaderLen = byteBuffer.getInt();
-        int headerLength = getHeaderLength(oriHeaderLen);
-
-        byte[] headerData = new byte[headerLength];
-        byteBuffer.get(headerData);
-
-        RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
-
-        int bodyLength = length - 4 - headerLength;
-        byte[] bodyData = null;
-        if (bodyLength > 0) {
-            bodyData = new byte[bodyLength];
-            byteBuffer.get(bodyData);
-        }
-        cmd.body = bodyData;
-
-        return cmd;
-    }
-
+    /**
+     * 获取头部长度
+     * @param length
+     * @return
+     */
     public static int getHeaderLength(int length) {
         return length & 0xFFFFFF;
     }
 
+
+    /**
+     * 对头部二进制解码为 RemotingCommand
+     * @param headerData
+     * @param type
+     * @return
+     */
     private static RemotingCommand headerDecode(byte[] headerData, SerializeType type) {
         switch (type) {
             case JSON:
@@ -245,9 +285,16 @@ public class RemotingCommand {
         return null;
     }
 
+
+    /**
+     * <header length> 中第一个字节表示的序列化类型
+     * @param source
+     * @return
+     */
     public static SerializeType getProtocolType(int source) {
         return SerializeType.valueOf((byte) ((source >> 24) & 0xFF));
     }
+
 
     public static int createNewRequestId() {
         return requestId.incrementAndGet();
@@ -270,6 +317,13 @@ public class RemotingCommand {
         return true;
     }
 
+
+    /**
+     * 编码 <header length>
+     * @param source 头部长度
+     * @param type  序列化类型
+     * @return
+     */
     public static byte[] markProtocolType(int source, SerializeType type) {
         byte[] result = new byte[4];
 
@@ -280,6 +334,13 @@ public class RemotingCommand {
         return result;
     }
 
+
+    /**
+     * 获取RemotingCommand 类型
+     *
+     * flag =0 表示请求类型  flag =1 表示返回类型
+     *
+     */
     public void markResponseType() {
         int bits = 1 << RPC_TYPE;
         this.flag |= bits;
@@ -419,6 +480,32 @@ public class RemotingCommand {
         result.flip();
 
         return result;
+    }
+
+    public static RemotingCommand decode(final byte[] array) {
+        ByteBuffer byteBuffer = ByteBuffer.wrap(array);
+        return decode(byteBuffer);
+    }
+
+    public static RemotingCommand decode(final ByteBuffer byteBuffer) {
+        int length = byteBuffer.limit();
+        int oriHeaderLen = byteBuffer.getInt();
+        int headerLength = getHeaderLength(oriHeaderLen);
+
+        byte[] headerData = new byte[headerLength];
+        byteBuffer.get(headerData);
+
+        RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
+
+        int bodyLength = length - 4 - headerLength;
+        byte[] bodyData = null;
+        if (bodyLength > 0) {
+            bodyData = new byte[bodyLength];
+            byteBuffer.get(bodyData);
+        }
+        cmd.body = bodyData;
+
+        return cmd;
     }
 
     private byte[] headerEncode() {
