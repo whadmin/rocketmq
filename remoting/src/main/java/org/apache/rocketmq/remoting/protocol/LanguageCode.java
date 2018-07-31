@@ -17,6 +17,9 @@
 
 package org.apache.rocketmq.remoting.protocol;
 
+/**
+ * 描述RemotingCommand传输过程中客户端和服务端的的实现语言。
+ */
 public enum LanguageCode {
     JAVA((byte) 0),
     CPP((byte) 1),

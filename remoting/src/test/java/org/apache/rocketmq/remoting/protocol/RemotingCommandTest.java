@@ -50,6 +50,9 @@ public class RemotingCommandTest {
         assertThat(result).isEqualTo(new byte[] {1, -1, -1, -1});
     }
 
+    /**
+     * 测试创建一个Request类型的RemotingCommand
+     */
     @Test
     public void testCreateRequestCommand_RegisterBroker() {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, "2333");
@@ -64,6 +67,9 @@ public class RemotingCommandTest {
         assertThat(cmd.getFlag() & 0x01).isEqualTo(3);
     }
 
+    /**
+     * 测试创建一个Response类型的RemotingCommand
+     */
     @Test
     public void testCreateResponseCommand_SuccessWithHeader() {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, "2333");
@@ -79,6 +85,9 @@ public class RemotingCommandTest {
         assertThat(cmd.getFlag() & 0x01).isEqualTo(3);
     }
 
+    /**
+     * 测试创建一个Response类型的RemotingCommand 不带CommandCustomHeader
+     */
     @Test
     public void testCreateResponseCommand_SuccessWithoutHeader() {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, "2333");
@@ -94,16 +103,10 @@ public class RemotingCommandTest {
         assertThat(cmd.getFlag() & 0x01).isEqualTo(3);
     }
 
-    @Test
-    public void testCreateResponseCommand_FailToCreateCommand() {
-        System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, "2333");
 
-        int code = RemotingSysResponseCode.SUCCESS;
-        String remark = "Sample remark";
-        RemotingCommand cmd = RemotingCommand.createResponseCommand(code, remark, CommandCustomHeader.class);
-        assertThat(cmd).isNull();
-    }
-
+    /**
+     * 测试创建一个Response类型的RemotingCommand 使用默认的code 和 Remark
+     */
     @Test
     public void testCreateResponseCommand_SystemError() {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, "2333");
@@ -114,6 +117,22 @@ public class RemotingCommandTest {
         assertThat(cmd.getRemark()).contains("not set any response code");
         assertThat(cmd.getFlag() & 0x01).isEqualTo(1); //flag bit 0: 1 presents response
     }
+
+
+    /**
+     * 测试创建一个Response类型的RemotingCommand CommandCustomHeader不能是接口。创建cmd is null
+     */
+    @Test
+    public void testCreateResponseCommand_FailToCreateCommand() {
+        System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, "2333");
+
+        int code = RemotingSysResponseCode.SUCCESS;
+        String remark = "Sample remark";
+        RemotingCommand cmd = RemotingCommand.createResponseCommand(code, remark, CommandCustomHeader.class);
+        assertThat(cmd).isNull();
+    }
+
+
 
     @Test
     public void testEncodeAndDecode_EmptyBody() {

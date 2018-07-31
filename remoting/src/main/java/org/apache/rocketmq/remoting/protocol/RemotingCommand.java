@@ -32,7 +32,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 计算机网络通讯 通过byte[]进行相互，我们需要设计客户端和服务交互的协议
+ *
+ * 如下
  * <length> <header length> <header data> <body data>
+ *  4个字节    4个字节
  * 服务器与客户端通过传递 如上协议进行交互，
  *
   length：4个字节的int型数据，用来存储header length、header data、body data的总和，也就是网络传输包的数据总长
@@ -253,7 +257,7 @@ public class RemotingCommand {
 
 
     /**
-     * 获取头部长度
+     * 通过<header length> 整数【4个字节表示】 后3个字节获得<header data>序列化类型
      * @param length
      * @return
      */
@@ -287,7 +291,7 @@ public class RemotingCommand {
 
 
     /**
-     * <header length> 中第一个字节表示的序列化类型
+     * 通过<header length> 整数【4个字节表示】 第1个字节获得<header data>序列化方式
      * @param source
      * @return
      */
@@ -448,31 +452,38 @@ public class RemotingCommand {
         return name;
     }
 
+    /**
+     * 将RemotingCommand编码 转化为协议 <length> <header length> <header data> <body data>
+     * @return
+     */
     public ByteBuffer encode() {
-        // 1> header length size
+        // 1> <header length> 占用4个字节
         int length = 4;
 
-        // 2> header data length
+        // 2> 针对当前对象RemotingCommand序列化为2进制数组 表示协议中的 <header data>.
+        // 获取2进制数组的长度累加到length length 表示 <header length> <header data> 占用的总字节
         byte[] headerData = this.headerEncode();
         length += headerData.length;
 
-        // 3> body data length
+        // 3> RemotingCommand.body表示协议中<body data>
+        // 获取body的长度累加到length length 表示 <header length> <header data> <body data> 占用的总字节
         if (this.body != null) {
             length += body.length;
         }
 
+        //分配空间 4 表示协议中<length>占用的  length 表示 <header length> <header data> <body data> 占用的总字节
         ByteBuffer result = ByteBuffer.allocate(4 + length);
 
-        // length
+        // 添加 length
         result.putInt(length);
 
-        // header length
+        // 添加 header length
         result.put(markProtocolType(headerData.length, serializeTypeCurrentRPC));
 
-        // header data
+        // 添加 header data
         result.put(headerData);
 
-        // body data;
+        // 添加 body data;
         if (this.body != null) {
             result.put(this.body);
         }
@@ -482,21 +493,33 @@ public class RemotingCommand {
         return result;
     }
 
+    /**
+     * 将协议 <header length> <header data> <body data> 转化为 RemotingCommand
+     * 协议 <length> 部分被NettyDecoder 去掉
+     * @param array
+     * @return
+     */
     public static RemotingCommand decode(final byte[] array) {
         ByteBuffer byteBuffer = ByteBuffer.wrap(array);
         return decode(byteBuffer);
     }
 
     public static RemotingCommand decode(final ByteBuffer byteBuffer) {
+        //获取byteBuffer 总长度 表示 <header length> <header data> <body data> 占用的字节总数
         int length = byteBuffer.limit();
+        //获取前面4个字节 <header length> 的整数表示 整数的第1个字节表示序列化类型，后面3个字节表示<header data>长度
         int oriHeaderLen = byteBuffer.getInt();
+        //通过<header length> 整数【4个字节表示】 第1个字节获得<header data>长度
         int headerLength = getHeaderLength(oriHeaderLen);
 
+        //获取<header data> 字节数组
         byte[] headerData = new byte[headerLength];
         byteBuffer.get(headerData);
 
+        //通过<header length> 整数【4个字节表示】 第1个字节获得<header data>序列化方式
         RemotingCommand cmd = headerDecode(headerData, getProtocolType(oriHeaderLen));
 
+        //获取body
         int bodyLength = length - 4 - headerLength;
         byte[] bodyData = null;
         if (bodyLength > 0) {
