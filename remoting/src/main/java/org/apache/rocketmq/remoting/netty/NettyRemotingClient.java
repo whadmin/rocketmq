@@ -73,28 +73,28 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private static final long LOCK_TIMEOUT_MILLIS = 3000;
 
-    //客户端连接的配置对象
+    //Netty客户端配置对象
     private final NettyClientConfig nettyClientConfig;
 
     //netty客户端对象
     private final Bootstrap bootstrap = new Bootstrap();
 
-    //netty客户端处理IO时间的工作线程池组
+    //netty客户端处理IO事件的工作线程池组
     private final EventLoopGroup eventLoopGroupWorker;
 
-    //更新设置默认服务器地址通过lockNamesrvChannel加锁
+    //更新当前连接服务器地址独占锁
     private final Lock lockNamesrvChannel = new ReentrantLock();
 
-    //创建,关闭连接需要通过lockChannelTables加锁
+    //创建,关闭连接独占锁
     private final Lock lockChannelTables = new ReentrantLock();
 
-    //保存客户端对象连接的服务器连接对象集合Map  key 为服务器端的地址,value为连接服务器的连接对象ChannelWrapper
+    //保存NettyRemotingClient的服务器连接对象集合Map  key 为服务器端的地址,value为连接服务器的连接对象ChannelWrapper
     private final ConcurrentMap<String /* addr */, ChannelWrapper> channelTables = new ConcurrentHashMap<String, ChannelWrapper>();
 
     //客户端的对象连接服务器的地址的集合对象，客户端对象可以连接多个服务器
     private final AtomicReference<List<String>> namesrvAddrList = new AtomicReference<List<String>>();
 
-    // 当前客户端正在连接的服务端的地址,也称为默认地址
+    // 当前客户端正在连接的服务端的地址,默认地址
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
 
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
@@ -102,19 +102,24 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private final AtomicInteger namesrvIndex = new AtomicInteger(initValueIndex());
 
-    //通用线程池对象
+    //针对NettyRequestProcessor业务处理类  默认异步执行线程池对象
     private final ExecutorService publicExecutor;
 
-    //处理异步调用回调线程池
+    //针对一次异步RPC调用，针对回调异步处理线程池。
     private ExecutorService callbackExecutor;
 
-    //监听IO 事件对象
+    //针对监听客户端IO事件 提供回调实现
+    /**
+     * 客户端 注册 NettyConnectManageHandler【ChannelDuplexHandler】针对不同IO事件通过。
+     * 向父类中nettyEventExecutor事件线程池中putNettyEvent事件，nettyEventExecutor会根据不同的事件调用
+     * ChannelEventListener 对应的回调函数。
+     */
     private final ChannelEventListener channelEventListener;
 
-    //独立处理ChannelHandlerAdapter回调线程池
+    //netty 异步处理ChannelHandlerAdapter Nio线程池对象
     private DefaultEventExecutorGroup defaultEventExecutorGroup;
 
-    //客户请求服务器前，和请求返回后提供钩子方法。用来做扩展处理
+    //一次RPC调用发起请求，请求返回后出提供钩子方法做扩展处理
     private RPCHook rpcHook;
 
     public NettyRemotingClient(final NettyClientConfig nettyClientConfig) {
@@ -132,7 +137,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         super(nettyClientConfig.getClientOnewaySemaphoreValue(), nettyClientConfig.getClientAsyncSemaphoreValue());
         //设置netty配置对象
         this.nettyClientConfig = nettyClientConfig;
-        //设置监听netty 客户端IO事件监听 对象
+        //设置监听netty 客户端IO事件监听 并做回调处理
         this.channelEventListener = channelEventListener;
 
         int publicThreadNums = nettyClientConfig.getClientCallbackExecutorThreads();
@@ -140,7 +145,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             publicThreadNums = 4;
         }
 
-        //设置通用的线程池对象
+        //设置针对NettyRequestProcessor业务处理类  默认异步执行线程池对象
         this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -150,7 +155,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
             }
         });
 
-        //设置处理IO 事件线程池组
+        //设置netty客户端处理IO事件的工作线程池组
         this.eventLoopGroupWorker = new NioEventLoopGroup(1, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -186,7 +191,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
      */
     @Override
     public void start() {
-        //单独定义个netty线程池组负责异步处理 ChannelHandlerAdapter 中回调方法。这样就不在和处理IO事件的netty线程池组公用一个线程池组而是独立出来。
+        //单独定义个netty线程池组负责异步处理 ChannelHandlerAdapter 中回调方法。减轻eventLoopGroupWorker线程池组的工作，不设置默认由eventLoopGroupWorker线程池处理
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
             nettyClientConfig.getClientWorkerThreads(),
             new ThreadFactory() {

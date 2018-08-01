@@ -76,6 +76,10 @@ public class RouteInfoManager {
         return clusterInfoSerializeWrapper.encode();
     }
 
+    /**
+     * 删除topic
+     * @param topic
+     */
     public void deleteTopic(final String topic) {
         try {
             try {
@@ -89,6 +93,10 @@ public class RouteInfoManager {
         }
     }
 
+    /**
+     * 获取所有topic名称封装对象 TopicList 2进制编码
+     * @return
+     */
     public byte[] getAllTopicList() {
         TopicList topicList = new TopicList();
         try {
@@ -105,6 +113,18 @@ public class RouteInfoManager {
         return topicList.encode();
     }
 
+    /**
+     * 注册一个Broker
+     * @param clusterName
+     * @param brokerAddr
+     * @param brokerName
+     * @param brokerId
+     * @param haServerAddr
+     * @param topicConfigWrapper
+     * @param filterServerList
+     * @param channel
+     * @return
+     */
     public RegisterBrokerResult registerBroker(
         final String clusterName,
         final String brokerAddr,
@@ -117,23 +137,26 @@ public class RouteInfoManager {
         RegisterBrokerResult result = new RegisterBrokerResult();
         try {
             try {
+                //读写锁阻塞（可以中断）
                 this.lock.writeLock().lockInterruptibly();
-
+                //从clusterAddrTable 中 获取当前注册集群名称对应的 brokerNames 集合
                 Set<String> brokerNames = this.clusterAddrTable.get(clusterName);
                 if (null == brokerNames) {
                     brokerNames = new HashSet<String>();
                     this.clusterAddrTable.put(clusterName, brokerNames);
                 }
+                //将brokerName 添加到集群中对应brokerNames中
                 brokerNames.add(brokerName);
 
                 boolean registerFirst = false;
-
+                //从brokerAddrTable中 获取当前名称对应BrokerData信息（主从broker对应的brokerName名称相同,brokerName相当于一个小集群）
                 BrokerData brokerData = this.brokerAddrTable.get(brokerName);
                 if (null == brokerData) {
                     registerFirst = true;
                     brokerData = new BrokerData(clusterName, brokerName, new HashMap<Long, String>());
                     this.brokerAddrTable.put(brokerName, brokerData);
                 }
+                //将brokerId（代表物理上唯一broker）和对应地址注册到 brokerData.getBrokerAddrs()中
                 String oldAddr = brokerData.getBrokerAddrs().put(brokerId, brokerAddr);
                 registerFirst = registerFirst || (null == oldAddr);
 

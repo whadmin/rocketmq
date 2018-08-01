@@ -67,6 +67,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
     private final ServerBootstrap serverBootstrap;
     private final EventLoopGroup eventLoopGroupSelector;
     private final EventLoopGroup eventLoopGroupBoss;
+    //Netty服务端配置对象
     private final NettyServerConfig nettyServerConfig;
 
     private final ExecutorService publicExecutor;
