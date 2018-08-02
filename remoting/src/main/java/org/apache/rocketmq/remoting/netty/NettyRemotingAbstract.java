@@ -50,6 +50,16 @@ import org.apache.rocketmq.remoting.protocol.RemotingSysResponseCode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * NettyRemotingAbstract 是 NettyRemotingServer,NettyRemotingClient公共父类
+ *
+ * 提供了NettyRemotingServer,NettyRemotingClient通用功能
+ *
+ * 1 事件监控处理 NettyEventExecutor
+ *
+ * NettyRemotingServer
+ *
+ */
 public abstract class NettyRemotingAbstract {
 
     /**
@@ -89,61 +99,41 @@ public abstract class NettyRemotingAbstract {
      */
     protected Pair<NettyRequestProcessor, ExecutorService> defaultRequestProcessor;
 
-    /**
-     * SSL context via which to create {@link SslHandler}.
-     */
+
     protected SslContext sslContext;
 
-    /**
-     * Constructor, specifying capacity of one-way and asynchronous semaphores.
-     *
-     * @param permitsOneway Number of permits for one-way requests.
-     * @param permitsAsync Number of permits for asynchronous requests.
-     */
+
     public NettyRemotingAbstract(final int permitsOneway, final int permitsAsync) {
         this.semaphoreOneway = new Semaphore(permitsOneway, true);
         this.semaphoreAsync = new Semaphore(permitsAsync, true);
     }
 
-    /**
-     * Custom channel event listener.
-     *
-     * @return custom channel event listener if defined; null otherwise.
-     */
+
     public abstract ChannelEventListener getChannelEventListener();
 
     /**
-     * Put a netty event to the executor.
-     *
-     * @param event Netty event instance.
+     * 添加一个 NettyEvent（Netty事件）给nettyEventExecutor 事件处理线程池
+     * @param event NettyEvent（Netty事件）
      */
     public void putNettyEvent(final NettyEvent event) {
         this.nettyEventExecutor.putNettyEvent(event);
     }
 
     /**
-     * Entry of incoming command processing.
+     * NettyRemotingServer netty NettyServerHandler channelRead0 的实现
+     * NettyRemotingClient netty NettyClientHandler channelRead0 的实现
      *
-     * <p>
-     * <strong>Note:</strong>
-     * The incoming remoting command may be
-     * <ul>
-     * <li>An inquiry request from a remote peer component;</li>
-     * <li>A response to a previous request issued by this very participant.</li>
-     * </ul>
-     * </p>
-     *
-     * @param ctx Channel handler context.
-     * @param msg incoming remoting command.
-     * @throws Exception if there were any error while processing the incoming command.
+     * 客户端和服务端RPC IO业务处理类通用实现
      */
     public void processMessageReceived(ChannelHandlerContext ctx, RemotingCommand msg) throws Exception {
         final RemotingCommand cmd = msg;
         if (cmd != null) {
             switch (cmd.getType()) {
+                //处理请求类型RemotingCommand
                 case REQUEST_COMMAND:
                     processRequestCommand(ctx, cmd);
                     break;
+                //处理响应类型RemotingCommand
                 case RESPONSE_COMMAND:
                     processResponseCommand(ctx, cmd);
                     break;
@@ -154,34 +144,44 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * Process incoming request command issued by remote peer.
-     *
+     * 处理请求类型RemotingCommand
      * @param ctx channel handler context.
      * @param cmd request command.
      */
     public void processRequestCommand(final ChannelHandlerContext ctx, final RemotingCommand cmd) {
+        //通过RPC请求发起方请求对象RemotingCommand code 找到RPC请求处理方对应NettyRequestProcessor
+        //不存在则选择defaultRequestProcessor
         final Pair<NettyRequestProcessor, ExecutorService> matched = this.processorTable.get(cmd.getCode());
         final Pair<NettyRequestProcessor, ExecutorService> pair = null == matched ? this.defaultRequestProcessor : matched;
+        //获取当前请求的ID
         final int opaque = cmd.getOpaque();
 
         if (pair != null) {
+            //构造请求处理异步任务
             Runnable run = new Runnable() {
                 @Override
                 public void run() {
                     try {
+                        //获取RPCHook
                         RPCHook rpcHook = NettyRemotingAbstract.this.getRPCHook();
+                        //RPCHook 在请求处理前置操作
                         if (rpcHook != null) {
                             rpcHook.doBeforeRequest(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd);
                         }
 
+                        //RPCHook 在请求处理后置操作
                         final RemotingCommand response = pair.getObject1().processRequest(ctx, cmd);
+
+                        //NettyRemotingServer或NettyRemotingClient REQUEST_COMMAND 类型请求后置处理
                         if (rpcHook != null) {
                             rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(ctx.channel()), cmd, response);
                         }
 
+                        //如果请求是单向无需返回
                         if (!cmd.isOnewayRPC()) {
                             if (response != null) {
                                 response.setOpaque(opaque);
+                                //设置response emotingCommand 为RESPONSE_COMMAND类型
                                 response.markResponseType();
                                 try {
                                     ctx.writeAndFlush(response);
@@ -217,6 +217,7 @@ public abstract class NettyRemotingAbstract {
             }
 
             try {
+                //使用pair.getObject2()中线程池处理请求.
                 final RequestTask requestTask = new RequestTask(run, ctx.channel(), cmd);
                 pair.getObject2().submit(requestTask);
             } catch (RejectedExecutionException e) {
@@ -245,7 +246,7 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * Process response from remote peer to the previous issued requests.
+     * 处理响应类型RemotingCommand
      *
      * @param ctx channel handler context.
      * @param cmd response command instance.

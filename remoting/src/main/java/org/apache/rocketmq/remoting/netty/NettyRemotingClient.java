@@ -456,7 +456,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
 
     /**
-     * invokeSync 表示客户端向服务端发起请求
+     * invokeSync 表示客户端向服务端发起普通请求
      *
      * @param addr  请求服务端地址  localhost:8888
      * @param request  netty 请求IO对象
@@ -470,17 +470,17 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     @Override
     public RemotingCommand invokeSync(String addr, final RemotingCommand request, long timeoutMillis)
         throws InterruptedException, RemotingConnectException, RemotingSendRequestException, RemotingTimeoutException {
-        //针对指定地址的服务器，客户端发起连接获取NioSocketChannel
+        //客户端针对指定地址的服务器发起连接获取NioSocketChannel
         final Channel channel = this.getAndCreateChannel(addr);
-        //判断NioSocketChannel 是否连接正常，正常则发送请求给服务端
+        //判断NioSocketChannel 是否连接到服务端
         if (channel != null && channel.isActive()) {
             try {
-                //可以给NettyRemotingClient设置钩子对象，用来同步调用前做一些处理
+                //客户端在调用RPC请求前 调用 rpcHook.doBeforeRequest 前置处理
                 if (this.rpcHook != null) {
                     this.rpcHook.doBeforeRequest(addr, request);
                 }
                 RemotingCommand response = this.invokeSyncImpl(channel, request, timeoutMillis);
-                //可以给NettyRemotingClient设置钩子对象，用来同步调用后做一些处理
+                //客户端在调用RPC请求后 调用 rpcHook.doAfterResponse 后置处理
                 if (this.rpcHook != null) {
                     this.rpcHook.doAfterResponse(RemotingHelper.parseChannelRemoteAddr(channel), request, response);
                 }
@@ -507,12 +507,86 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     }
 
     /**
+     * 客户端异步请求服务器
+     * @param addr   服务器地址
+     * @param request   请求包对象
+     * @param timeoutMillis   请求超时时间
+     * @param invokeCallback  请求响应后回调函数
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     */
+    @Override
+    public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback)
+        throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException,
+        RemotingSendRequestException {
+        //客户端针对指定地址的服务器发起连接获取NioSocketChannel
+        final Channel channel = this.getAndCreateChannel(addr);
+        //判断NioSocketChannel 是否连接到服务端
+        if (channel != null && channel.isActive()) {
+            try {
+                //客户端在调用RPC请求前 调用 rpcHook.doBeforeRequest 前置处理
+                if (this.rpcHook != null) {
+                    this.rpcHook.doBeforeRequest(addr, request);
+                }
+                //调用父类NettyRemotingAbstract invokeAsyncImpl方法实现异步RPC请求
+                this.invokeAsyncImpl(channel, request, timeoutMillis, invokeCallback);
+            } catch (RemotingSendRequestException e) {
+                log.warn("invokeAsync: send request exception, so close the channel[{}]", addr);
+                this.closeChannel(addr, channel);
+                throw e;
+            }
+        } else {
+            this.closeChannel(addr, channel);
+            throw new RemotingConnectException(addr);
+        }
+    }
+
+    /**
+     * 客户端单项请求服务器
+     * @param addr   服务器地址
+     * @param request   请求包对象
+     * @param timeoutMillis 请求超时时间
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     */
+    @Override
+    public void invokeOneway(String addr, RemotingCommand request, long timeoutMillis) throws InterruptedException,
+        RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
+        //客户端针对指定地址的服务器发起连接获取NioSocketChannel
+        final Channel channel = this.getAndCreateChannel(addr);
+        //判断NioSocketChannel 是否连接到服务端
+        if (channel != null && channel.isActive()) {
+            try {
+                //客户端在调用RPC请求前 调用 rpcHook.doBeforeRequest 前置处理
+                if (this.rpcHook != null) {
+                    this.rpcHook.doBeforeRequest(addr, request);
+                }
+                //调用父类NettyRemotingAbstract invokeOnewayImpl方法实现单项RPC请求
+                this.invokeOnewayImpl(channel, request, timeoutMillis);
+            } catch (RemotingSendRequestException e) {
+                log.warn("invokeOneway: send request exception, so close the channel[{}]", addr);
+                this.closeChannel(addr, channel);
+                throw e;
+            }
+        } else {
+            this.closeChannel(addr, channel);
+            throw new RemotingConnectException(addr);
+        }
+    }
+
+    /**
      * @param addr 请求服务端地址 localhost:8888
      * @return  服务端连接NioSocketChannel
      * @throws InterruptedException
      */
     private Channel getAndCreateChannel(final String addr) throws InterruptedException {
-        //客户端连接服务端时,并没有明确传递要连接服务器地址时,客户端从本地缓存连接过的服务器地址集合对象namesrvAddrList中选举出一个默认的服务端地址设置到对象namesrvAddrChoosed,并对此地址服务器重新连接，返回NioSocketChannel.
+        //客户端连接服务端时,并没有明确传递要连接服务器地址时,客户端从本地缓存连接过的服务器地址集合对象namesrvAddrList中选举出一个默认的服务端地址设置也可以认为是当前连接的地址到对象namesrvAddrChoosed,并对此地址服务器重新连接，返回NioSocketChannel.
         if (null == addr)
             return getAndCreateNameserverChannel();
 
@@ -590,7 +664,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
     private Channel createChannel(final String addr) throws InterruptedException {
         //判断连接的地址，是否存在于channelTables中，每当客户端和服务器连接都会把服务器地址作为key,连接对象ChannelWrapper（NioSocketChannel对象的封装）作为value保存到channelTables中
-        //如果存且连接对象ChannelWrapper正常直接返回
+        //如果存且连接对象ChannelWrapper，且此连接NioSocketChannel.通讯正常。说明客户端已经存在了和服务器连接不需要在重新连接。直接返回。
         ChannelWrapper cw = this.channelTables.get(addr);
         if (cw != null && cw.isOK()) {
             cw.getChannel().close();
@@ -599,12 +673,13 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         //连接过程中需要加锁防止其他线程干扰.
         if (this.lockChannelTables.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
             try {
+                //是否需要创建一个新的连接
                 boolean createNewConnection;
                 //从channelTables中获取该地址对应的ChannelWrapper连接对象
                 cw = this.channelTables.get(addr);
-                //cw!=null 说明此地址服务器客户端连接过
+                //cw!=null 说明客户端和此地址服务器客户端连接过
                 if (cw != null) {
-                    //cw.isOK() 表示存在一个和此地址连接正常的hannelWrapper连接对象
+                    //cw.isOK() 表示存在一个和此地址连接正常的hannelWrapper连接对象，在此我们不会返回此连接，我们会关闭此连接通道，重新连接服务器
                     if (cw.isOK()) {
                         //关闭此连接
                         cw.getChannel().close();
@@ -643,7 +718,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         if (cw != null) {
             //获取连接结果对象 ChannelFuture
             ChannelFuture channelFuture = cw.getChannelFuture();
-            //等待nettyClientConfig.getConnectTimeoutMillis()时间，等待连接是否获得服务端的响应，
+            //等待nettyClientConfig.getConnectTimeoutMillis()时间，在等待时间内连接完成，返回此连接。否则连接失败，
             if (channelFuture.awaitUninterruptibly(this.nettyClientConfig.getConnectTimeoutMillis())) {
                 //判断连接是否完成。完成则返回
                 if (cw.isOK()) {
@@ -654,62 +729,22 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             } else {
                 log.warn("createChannel: connect remote host[{}] timeout {}ms, {}", addr, this.nettyClientConfig.getConnectTimeoutMillis(),
-                    channelFuture.toString());
+                        channelFuture.toString());
             }
         }
 
         return null;
     }
 
-    @Override
-    public void invokeAsync(String addr, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback)
-        throws InterruptedException, RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException,
-        RemotingSendRequestException {
-        //针对指定地址的服务器，客户端发起连接获取NioSocketChannel
-        final Channel channel = this.getAndCreateChannel(addr);
-        if (channel != null && channel.isActive()) {
-            try {
-                //可以给NettyRemotingClient设置钩子对象，用来同步调用前做一些处理
-                if (this.rpcHook != null) {
-                    this.rpcHook.doBeforeRequest(addr, request);
-                }
-                //调用父类NettyRemotingAbstract 的实现
-                this.invokeAsyncImpl(channel, request, timeoutMillis, invokeCallback);
-            } catch (RemotingSendRequestException e) {
-                log.warn("invokeAsync: send request exception, so close the channel[{}]", addr);
-                this.closeChannel(addr, channel);
-                throw e;
-            }
-        } else {
-            this.closeChannel(addr, channel);
-            throw new RemotingConnectException(addr);
-        }
-    }
-
-    @Override
-    public void invokeOneway(String addr, RemotingCommand request, long timeoutMillis) throws InterruptedException,
-        RemotingConnectException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
-        //针对指定地址的服务器，客户端发起连接获取NioSocketChannel
-        final Channel channel = this.getAndCreateChannel(addr);
-        if (channel != null && channel.isActive()) {
-            try {
-                //可以给NettyRemotingClient设置钩子对象，用来同步调用前做一些处理
-                if (this.rpcHook != null) {
-                    this.rpcHook.doBeforeRequest(addr, request);
-                }
-                //调用父类NettyRemotingAbstract 的实现
-                this.invokeOnewayImpl(channel, request, timeoutMillis);
-            } catch (RemotingSendRequestException e) {
-                log.warn("invokeOneway: send request exception, so close the channel[{}]", addr);
-                this.closeChannel(addr, channel);
-                throw e;
-            }
-        } else {
-            this.closeChannel(addr, channel);
-            throw new RemotingConnectException(addr);
-        }
-    }
-
+    /**
+     * 注册一个请求业务处理NettyRequestProcessor类，每一个requestCode，都会有一个NettyRequestProcessor。
+     * 客户端使用Netty NettyClientHandler【SimpleChannelInboundHandler】 处理IO事件业务操作会通过解析 RPC请求包对象RemotingCommand
+     * 获取RemotingCommand 类型  REQUEST_COMMAND 或者 RESPONSE_COMMAND 如果是REQUEST_COMMAND 会通过RemotingCommand 请求code使用对应的ettyRequestProcessor
+     *
+     * @param requestCode
+     * @param processor
+     * @param executor
+     */
     @Override
     public void registerProcessor(int requestCode, NettyRequestProcessor processor, ExecutorService executor) {
         ExecutorService executorThis = executor;

@@ -61,11 +61,11 @@ public class RemotingCommand {
     public static final String REMOTING_VERSION_KEY = "rocketmq.remoting.version";
 
     /**
-     * rpc类型的标注，一种是普通的RPC请求{请求等待回应} 请求类型为RPC_TYPE 这里的0 表示2的0次方
+     * rpc类型的标注，flag 二进制第0位  0000 0000 0000 0000 表示请求类型,0000 0000 0000 0010 表示响应类型.
      */
     private static final int RPC_TYPE = 0;
     /**
-     * rpc类型的标注，一种是单向RPC请求{请求无须回应} 返回类型或者无需应答的为 这里的1 表示2的1次方
+     * rpc类型的标注，flag 二进制第1位 0000 0000 0000 0001 表示请求类型不需要响应
      */
     private static final int RPC_ONEWAY = 1;
 
@@ -121,7 +121,9 @@ public class RemotingCommand {
     private int version = 0;
 
     /**
-     * 0 一种是普通的RPC request类型{请求等待回应}  1 3 表示Response类型{无须回应}  2  一种是单向RPC请求{请求无须回应}
+     * 0 一种是普通的RPC request类型{请求等待回应}  1 表示Response类型  2  一种是单向RPC请求{请求无须回应}
+     * 这里客户端可以向服务端发送  request类型RemotingCommand 服务端也可以像客户端发送 request类型RemotingCommand
+     * 当发出一个request类型RemotingCommand ,客户端和服务必须做出响应 向对方发送 Response类型 RemotingCommand
      */
     private int flag = 0;
 
@@ -340,10 +342,7 @@ public class RemotingCommand {
 
 
     /**
-     * 获取RemotingCommand 类型
-     *
-     * flag =0 表示请求类型  flag =1 表示返回类型
-     *
+     *  设置类型为响应类型
      */
     public void markResponseType() {
         int bits = 1 << RPC_TYPE;
@@ -601,11 +600,18 @@ public class RemotingCommand {
         return result;
     }
 
+    /**
+     * 标记类型为单向请求
+     */
     public void markOnewayRPC() {
         int bits = 1 << RPC_ONEWAY;
         this.flag |= bits;
     }
 
+    /**
+     * 判断类型是否为单向请求
+     * @return
+     */
     @JSONField(serialize = false)
     public boolean isOnewayRPC() {
         int bits = 1 << RPC_ONEWAY;
@@ -620,6 +626,10 @@ public class RemotingCommand {
         this.code = code;
     }
 
+    /**
+     * 获取包数据类型 (REQUEST_COMMAND OR RESPONSE_COMMAND)
+     * @return
+     */
     @JSONField(serialize = false)
     public RemotingCommandType getType() {
         if (this.isResponseType()) {
@@ -629,6 +639,10 @@ public class RemotingCommand {
         return RemotingCommandType.REQUEST_COMMAND;
     }
 
+    /**
+     * 判断类型是否为响应类型
+     * @return
+     */
     @JSONField(serialize = false)
     public boolean isResponseType() {
         int bits = 1 << RPC_TYPE;
