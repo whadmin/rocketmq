@@ -50,6 +50,7 @@ public interface RemotingServer extends RemotingService {
     int localListenPort();
 
     /**
+     * 获取requestCode 对应处理器类NettyRequestProcessor
      * @param requestCode
      * @return
      */

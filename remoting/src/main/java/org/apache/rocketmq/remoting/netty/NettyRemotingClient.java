@@ -79,7 +79,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     //netty客户端对象
     private final Bootstrap bootstrap = new Bootstrap();
 
-    //netty客户端处理IO事件的工作线程池组
+    //netty客户端处理work线程池组
     private final EventLoopGroup eventLoopGroupWorker;
 
     //更新当前连接服务器地址独占锁
@@ -97,6 +97,9 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     // 当前客户端正在连接的服务端的地址,默认地址
     private final AtomicReference<String> namesrvAddrChoosed = new AtomicReference<String>();
 
+    /**
+     * 定时任务扫描正在未完结请求
+     */
     private final Timer timer = new Timer("ClientHouseKeepingService", true);
 
 
@@ -119,7 +122,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
     //netty 异步处理ChannelHandlerAdapter Nio线程池对象
     private DefaultEventExecutorGroup defaultEventExecutorGroup;
 
-    //一次RPC调用发起请求，请求返回后出提供钩子方法做扩展处理
+    //RPCHook可以对RPC请求发起方，请求响应方提供了前置后置的扩展回调操作。
     private RPCHook rpcHook;
 
     public NettyRemotingClient(final NettyClientConfig nettyClientConfig) {
@@ -238,7 +241,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
                 }
             });
 
-        //客户端定时任务执行
+        //客户端定时任务执行扫描responseTable
         this.timer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {

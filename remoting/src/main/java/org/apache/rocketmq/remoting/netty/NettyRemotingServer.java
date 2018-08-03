@@ -65,43 +65,65 @@ import org.slf4j.LoggerFactory;
 public class NettyRemotingServer extends NettyRemotingAbstract implements RemotingServer {
 
     private static final Logger log = LoggerFactory.getLogger(RemotingHelper.ROCKETMQ_REMOTING);
-    //服务端Bootstrap对象
+    //netty服务端对象
     private final ServerBootstrap serverBootstrap;
+    //netty服务端处理work线程池组
     private final EventLoopGroup eventLoopGroupSelector;
+    //netty服务端处理Boss线程池组
     private final EventLoopGroup eventLoopGroupBoss;
-    //Netty服务端配置对象
+    //netty服务端配置对象
     private final NettyServerConfig nettyServerConfig;
-
+    //针对NettyRequestProcessor业务处理类  默认异步执行线程池对象
     private final ExecutorService publicExecutor;
+    //针对监听服务端IO事件 提供回调实现
+    /**
+     * 客户端 注册 NettyConnectManageHandler【ChannelDuplexHandler】针对不同IO事件通过。
+     * 向父类中nettyEventExecutor事件线程池中putNettyEvent事件，nettyEventExecutor会根据不同的事件调用
+     * ChannelEventListener 对应的回调函数。
+     */
     private final ChannelEventListener channelEventListener;
-
+    /**
+     * 定时任务扫描正在未完结请求
+     */
     private final Timer timer = new Timer("ServerHouseKeepingService", true);
+
+    //netty 异步处理ChannelHandlerAdapter Nio线程池对象
     private DefaultEventExecutorGroup defaultEventExecutorGroup;
 
+    //RPCHook可以对RPC请求发起方，请求响应方提供了前置后置的扩展回调操作。
     private RPCHook rpcHook;
-
+    //服务器监听端口
     private int port = 0;
 
     private static final String HANDSHAKE_HANDLER_NAME = "handshakeHandler";
+
     private static final String TLS_HANDLER_NAME = "sslHandler";
+
     private static final String FILE_REGION_ENCODER_NAME = "fileRegionEncoder";
 
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig) {
         this(nettyServerConfig, null);
     }
 
+    /**
+     * 初始化NettyRemotingServer
+     * @param nettyServerConfig
+     * @param channelEventListener
+     */
     public NettyRemotingServer(final NettyServerConfig nettyServerConfig,
         final ChannelEventListener channelEventListener) {
         super(nettyServerConfig.getServerOnewaySemaphoreValue(), nettyServerConfig.getServerAsyncSemaphoreValue());
         this.serverBootstrap = new ServerBootstrap();
+        //设置netty服务端配置对象
         this.nettyServerConfig = nettyServerConfig;
+        //设置监听
         this.channelEventListener = channelEventListener;
 
         int publicThreadNums = nettyServerConfig.getServerCallbackExecutorThreads();
         if (publicThreadNums <= 0) {
             publicThreadNums = 4;
         }
-
+        //创建NettyRequestProcessor业务处理类
         this.publicExecutor = Executors.newFixedThreadPool(publicThreadNums, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -110,7 +132,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 return new Thread(r, "NettyServerPublicExecutor_" + this.threadIndex.incrementAndGet());
             }
         });
-
+        //创建netty服务端处理Boss线程池组
         this.eventLoopGroupBoss = new NioEventLoopGroup(1, new ThreadFactory() {
             private AtomicInteger threadIndex = new AtomicInteger(0);
 
@@ -120,6 +142,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             }
         });
 
+        //创建netty服务端处理work线程池组
         if (useEpoll()) {
             this.eventLoopGroupSelector = new EpollEventLoopGroup(nettyServerConfig.getServerSelectorThreads(), new ThreadFactory() {
                 private AtomicInteger threadIndex = new AtomicInteger(0);
@@ -144,7 +167,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
 
         TlsMode tlsMode = TlsSystemConfig.tlsMode;
         log.info("Server is running in TLS {} mode", tlsMode.getName());
-
+        ////设置netty连接安全对象
         if (tlsMode != TlsMode.DISABLED) {
             try {
                 sslContext = TlsHelper.buildSslContext(false);
@@ -163,6 +186,9 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
             && Epoll.isAvailable();
     }
 
+    /**
+     * 启动服务端
+     */
     @Override
     public void start() {
         this.defaultEventExecutorGroup = new DefaultEventExecutorGroup(
@@ -177,6 +203,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
                 }
             });
 
+        //初始化netty 服务端对象serverBootstrap
+        //NettyEncoder 负责编码
+        //NettyDecoder 负责解码
+        //IdleStateHandler netty心跳
+        //NettyConnectManageHandler IO时间监听器
+        //NettyServerHandler 服务端业务处理类
         ServerBootstrap childHandler =
             this.serverBootstrap.group(this.eventLoopGroupBoss, this.eventLoopGroupSelector)
                 .channel(useEpoll() ? EpollServerSocketChannel.class : NioServerSocketChannel.class)
@@ -218,7 +250,7 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         if (this.channelEventListener != null) {
             this.nettyEventExecutor.start();
         }
-
+        //服务端定时任务执行扫描responseTable
         this.timer.scheduleAtFixedRate(new TimerTask() {
 
             @Override
@@ -232,6 +264,10 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         }, 1000 * 3, 1000);
     }
 
+    /**
+     * 关闭服务端
+     *
+     */
     @Override
     public void shutdown() {
         try {
@@ -268,6 +304,12 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this.rpcHook = rpcHook;
     }
 
+    /**
+     * 服务端注册一个请求处理器 NettyRequestProcessor
+     * @param requestCode  请求 code
+     * @param processor    请求处理器
+     * @param executor     异步执行处理NettyRequestProcessor 线程池
+     */
     @Override
     public void registerProcessor(int requestCode, NettyRequestProcessor processor, ExecutorService executor) {
         ExecutorService executorThis = executor;
@@ -279,33 +321,79 @@ public class NettyRemotingServer extends NettyRemotingAbstract implements Remoti
         this.processorTable.put(requestCode, pair);
     }
 
+    /**
+     * 服务端注册一个默认的处理服务端请求处理类 NettyRequestProcessor
+     * @param processor    请求处理类
+     * @param executor     异步执行处理NettyRequestProcessor 线程池
+     */
     @Override
     public void registerDefaultProcessor(NettyRequestProcessor processor, ExecutorService executor) {
         this.defaultRequestProcessor = new Pair<NettyRequestProcessor, ExecutorService>(processor, executor);
     }
 
+    /**
+     * 获取服务监听的地址
+     * @return
+     */
     @Override
     public int localListenPort() {
         return this.port;
     }
 
+
+    /**
+     * 获取requestCode 对应处理器类NettyRequestProcessor
+     * @param requestCode
+     * @return
+     */
     @Override
     public Pair<NettyRequestProcessor, ExecutorService> getProcessorPair(int requestCode) {
         return processorTable.get(requestCode);
     }
 
+    /**
+     * 同步请求
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @return
+     * @throws InterruptedException
+     * @throws RemotingSendRequestException
+     * @throws RemotingTimeoutException
+     */
     @Override
     public RemotingCommand invokeSync(final Channel channel, final RemotingCommand request, final long timeoutMillis)
         throws InterruptedException, RemotingSendRequestException, RemotingTimeoutException {
         return this.invokeSyncImpl(channel, request, timeoutMillis);
     }
 
+    /**
+     * 异步处理请求
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @param invokeCallback
+     * @throws InterruptedException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     */
     @Override
     public void invokeAsync(Channel channel, RemotingCommand request, long timeoutMillis, InvokeCallback invokeCallback)
         throws InterruptedException, RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
         this.invokeAsyncImpl(channel, request, timeoutMillis, invokeCallback);
     }
 
+    /**
+     * 单向处理请求
+     * @param channel
+     * @param request
+     * @param timeoutMillis
+     * @throws InterruptedException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingTimeoutException
+     * @throws RemotingSendRequestException
+     */
     @Override
     public void invokeOneway(Channel channel, RemotingCommand request, long timeoutMillis) throws InterruptedException,
         RemotingTooMuchRequestException, RemotingTimeoutException, RemotingSendRequestException {
