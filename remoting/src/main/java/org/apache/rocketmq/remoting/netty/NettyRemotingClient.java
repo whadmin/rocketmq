@@ -662,6 +662,12 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
         return null;
     }
 
+    /**
+     * 创建一个连接
+     * @param addr
+     * @return
+     * @throws InterruptedException
+     */
     private Channel createChannel(final String addr) throws InterruptedException {
         //判断连接的地址，是否存在于channelTables中，每当客户端和服务器连接都会把服务器地址作为key,连接对象ChannelWrapper（NioSocketChannel对象的封装）作为value保存到channelTables中
         //如果存且连接对象ChannelWrapper，且此连接NioSocketChannel.通讯正常。说明客户端已经存在了和服务器连接不需要在重新连接。直接返回。

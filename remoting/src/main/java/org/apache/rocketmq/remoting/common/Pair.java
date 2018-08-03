@@ -17,7 +17,9 @@
 package org.apache.rocketmq.remoting.common;
 
 public class Pair<T1, T2> {
+    //请求处理器
     private T1 object1;
+    //线程池
     private T2 object2;
 
     public Pair(T1 object1, T2 object2) {

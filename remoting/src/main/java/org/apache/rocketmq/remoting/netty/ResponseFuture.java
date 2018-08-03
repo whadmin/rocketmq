@@ -24,17 +24,26 @@ import org.apache.rocketmq.remoting.common.SemaphoreReleaseOnlyOnce;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public class ResponseFuture {
+    //请求ID
     private final int opaque;
+    //请求超时时间
     private final long timeoutMillis;
+    //如果是异步请求会设置回调函数
     private final InvokeCallback invokeCallback;
+
     private final long beginTimestamp = System.currentTimeMillis();
+    //同步请求时锁等待异步响应。
     private final CountDownLatch countDownLatch = new CountDownLatch(1);
 
+    //？没看明白
     private final SemaphoreReleaseOnlyOnce once;
 
     private final AtomicBoolean executeCallbackOnlyOnce = new AtomicBoolean(false);
+    //响应包对象。当发出非单向请求时会收到响应，当我们把响应数据包对象设置ResponseFuture表示一次请求的完结。
     private volatile RemotingCommand responseCommand;
+    //请求是否已经发出。当请求为单向请求时，请求数据包送出表示这次请求的完结。
     private volatile boolean sendRequestOK = true;
+    //记录请求发出时可能存在的异常
     private volatile Throwable cause;
 
     public ResponseFuture(int opaque, long timeoutMillis, InvokeCallback invokeCallback,

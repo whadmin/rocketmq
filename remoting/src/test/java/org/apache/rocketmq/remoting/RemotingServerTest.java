@@ -45,9 +45,16 @@ public class RemotingServerTest {
     private static RemotingServer remotingServer;
     private static RemotingClient remotingClient;
 
+    /**
+     * 创建createRemotingServer
+     * @return
+     * @throws InterruptedException
+     */
     public static RemotingServer createRemotingServer() throws InterruptedException {
         NettyServerConfig config = new NettyServerConfig();
+        //设置netty服务端配置
         RemotingServer remotingServer = new NettyRemotingServer(config);
+        //注册一个请求码为0的请求处理器。返回一个RemotingCommand,在返回时
         remotingServer.registerProcessor(0, new NettyRequestProcessor() {
             @Override
             public RemotingCommand processRequest(ChannelHandlerContext ctx, RemotingCommand request) {
@@ -60,16 +67,25 @@ public class RemotingServerTest {
                 return false;
             }
         }, Executors.newCachedThreadPool());
-
+        //启动服务器
         remotingServer.start();
 
         return remotingServer;
     }
 
+    /**
+     * 创建RemotingClient
+     * @return
+     */
     public static RemotingClient createRemotingClient() {
         return createRemotingClient(new NettyClientConfig());
     }
 
+    /**
+     * 创建RemotingClient 配置nettyClientConfig
+     * @param nettyClientConfig
+     * @return
+     */
     public static RemotingClient createRemotingClient(NettyClientConfig nettyClientConfig) {
         RemotingClient client = new NettyRemotingClient(nettyClientConfig);
         client.start();
@@ -88,12 +104,20 @@ public class RemotingServerTest {
         remotingServer.shutdown();
     }
 
+    /**
+     * 同步调用
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingSendRequestException
+     * @throws RemotingTimeoutException
+     */
     @Test
     public void testInvokeSync() throws InterruptedException, RemotingConnectException,
         RemotingSendRequestException, RemotingTimeoutException {
         RequestHeader requestHeader = new RequestHeader();
         requestHeader.setCount(1);
         requestHeader.setMessageTitle("Welcome");
+        //发乎请求code 为0
         RemotingCommand request = RemotingCommand.createRequestCommand(0, requestHeader);
         RemotingCommand response = remotingClient.invokeSync("localhost:8888", request, 10000000 * 1);
         assertTrue(response != null);
@@ -102,6 +126,14 @@ public class RemotingServerTest {
 
     }
 
+    /**
+     * 单向请求
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingTimeoutException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingSendRequestException
+     */
     @Test
     public void testInvokeOneway() throws InterruptedException, RemotingConnectException,
         RemotingTimeoutException, RemotingTooMuchRequestException, RemotingSendRequestException {
@@ -111,6 +143,14 @@ public class RemotingServerTest {
         remotingClient.invokeOneway("localhost:8888", request, 10000000 * 3);
     }
 
+    /**
+     * 异步请求
+     * @throws InterruptedException
+     * @throws RemotingConnectException
+     * @throws RemotingTimeoutException
+     * @throws RemotingTooMuchRequestException
+     * @throws RemotingSendRequestException
+     */
     @Test
     public void testInvokeAsync() throws InterruptedException, RemotingConnectException,
         RemotingTimeoutException, RemotingTooMuchRequestException, RemotingSendRequestException {
