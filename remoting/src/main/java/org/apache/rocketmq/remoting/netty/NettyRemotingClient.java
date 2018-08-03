@@ -424,8 +424,7 @@ public class NettyRemotingClient extends NettyRemotingAbstract implements Remoti
 
 
     /**
-     * 手动更新客户端连接的服务端地址集合，这使用不变的设计模式。将地址作为整体进行更新
-     *
+     * 更新客户端连接的服务端地址集合对象
      * @param addrs
      */
     @Override

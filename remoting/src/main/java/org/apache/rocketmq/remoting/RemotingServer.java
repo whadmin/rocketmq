@@ -49,6 +49,10 @@ public interface RemotingServer extends RemotingService {
      */
     int localListenPort();
 
+    /**
+     * @param requestCode
+     * @return
+     */
     Pair<NettyRequestProcessor, ExecutorService> getProcessorPair(final int requestCode);
 
     /**

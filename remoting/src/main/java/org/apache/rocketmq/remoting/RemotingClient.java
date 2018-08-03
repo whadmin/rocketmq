@@ -26,11 +26,14 @@ import org.apache.rocketmq.remoting.netty.NettyRequestProcessor;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 
 public interface RemotingClient extends RemotingService {
+
+
     /**
      * 更新客户端连接的服务端地址集合对象
      * @param addrs
      */
     void updateNameServerAddressList(final List<String> addrs);
+
     /**
      * 获取客户端连接服务器地址集合对象
      * @return
