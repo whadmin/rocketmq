@@ -120,8 +120,6 @@ public abstract class NettyRemotingAbstract {
     }
 
     /**
-     * NettyRemotingServer netty NettyServerHandler channelRead0 的实现
-     * NettyRemotingClient netty NettyClientHandler channelRead0 的实现
      *
      * 客户端和服务端RPC IO业务处理类通用实现
      */
