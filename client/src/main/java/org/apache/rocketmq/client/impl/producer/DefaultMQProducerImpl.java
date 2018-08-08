@@ -437,9 +437,11 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         final SendCallback sendCallback,
         final long timeout
     ) throws MQClientException, RemotingException, MQBrokerException, InterruptedException {
+        //检查DefaultMQProducerImpl 是否启动成功
         this.makeSureStateOK();
+        //校验消息
         Validators.checkMessage(msg, this.defaultMQProducer);
-
+        //创建一个invokeID
         final long invokeID = random.nextLong();
         long beginTimestampFirst = System.currentTimeMillis();
         long beginTimestampPrev = beginTimestampFirst;

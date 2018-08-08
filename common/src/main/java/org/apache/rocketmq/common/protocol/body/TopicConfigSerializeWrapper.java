@@ -24,9 +24,17 @@ import org.apache.rocketmq.common.TopicConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
 public class TopicConfigSerializeWrapper extends RemotingSerializable {
+
+    /**
+     * key to
+     *
+     */
     private ConcurrentMap<String, TopicConfig> topicConfigTable =
         new ConcurrentHashMap<String, TopicConfig>();
+
     private DataVersion dataVersion = new DataVersion();
+
+
 
     public ConcurrentMap<String, TopicConfig> getTopicConfigTable() {
         return topicConfigTable;
@@ -35,6 +43,8 @@ public class TopicConfigSerializeWrapper extends RemotingSerializable {
     public void setTopicConfigTable(ConcurrentMap<String, TopicConfig> topicConfigTable) {
         this.topicConfigTable = topicConfigTable;
     }
+
+
 
     public DataVersion getDataVersion() {
         return dataVersion;
