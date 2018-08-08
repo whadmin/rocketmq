@@ -38,99 +38,93 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyRemotingClient;
 
 /**
- * This class is the entry point for applications intending to send messages.
- * </p>
+ 这个类是打算发送消息的应用程序的入口点。
+ * < / p >
  *
- * It's fine to tune fields which exposes getter/setter methods, but keep in mind, all of them should work well out of
- * box for most scenarios.
- * </p>
+ *对公开getter/setter方法的字段进行调优是可以的，但是请记住，所有这些方法都应该很好地发挥作用
+ *大多数情况下都是这样。
+ * < / p >
  *
- * This class aggregates various <code>send</code> methods to deliver messages to brokers. Each of them has pros and
- * cons; you'd better understand strengths and weakness of them before actually coding.
- * </p>
+ *此类聚合各种send方法，以向代理发送消息。他们每个人都有优点和优点
+ *缺点;你最好在编码之前了解它们的优缺点。
+ * < / p >
  *
- * <p>
- * <strong>Thread Safety:</strong> After configuring and starting process, this class can be regarded as thread-safe
- * and used among multiple threads context.
- * </p>
+ * < p >
+ * <强>线程安全:配置启动后，可视为线程安全
+ *在多个线程上下文中使用。
+ * < / p >
  */
 public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
-     * Wrapping internal implementations for virtually all methods presented in this class.
+     * 将内部实现封装到这个类中几乎所有的方法。
      */
     protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
 
     /**
-     * Producer group conceptually aggregates all producer instances of exactly same role, which is particularly
-     * important when transactional messages are involved.
+     * 生产者组概念性地聚合了所有完全相同角色的生产者实例
      * </p>
-     *
-     * For non-transactional messages, it does not matter as long as it's unique per process.
-     * </p>
-     *
-     * See {@linktourl http://rocketmq.apache.org/docs/core-concept/} for more discussion.
+       对于非事务性消息，只要它在每个进程中都是唯一的，它就不重要。
      */
     private String producerGroup;
 
     /**
-     * Just for testing or demo program
+     * 只是为了测试或演示程序TOPIC
      */
     private String createTopicKey = MixAll.DEFAULT_TOPIC;
 
     /**
-     * Number of queues to create per default topic.
+     * 每个默认主题创建的队列数量
      */
     private volatile int defaultTopicQueueNums = 4;
 
     /**
-     * Timeout for sending messages.
+     * 发送消息超时时间
      */
     private int sendMsgTimeout = 3000;
 
     /**
-     * Compress message body threshold, namely, message body larger than 4k will be compressed on default.
+     * 压缩消息体阈值，即大于4k的消息体将默认压缩。
      */
     private int compressMsgBodyOverHowmuch = 1024 * 4;
 
     /**
-     * Maximum number of retry to perform internally before claiming sending failure in synchronous mode.
+     * 在同步模式下声明发送失败之前内部执行的最大重试次数。
      * </p>
-     *
-     * This may potentially cause message duplication which is up to application developers to resolve.
+     * 这可能会导致消息重复，这取决于应用程序开发人员要解决的问题。
      */
     private int retryTimesWhenSendFailed = 2;
 
     /**
-     * Maximum number of retry to perform internally before claiming sending failure in asynchronous mode.
+     * 在声明在异步模式下发送失败之前，在内部执行的最大重试次数。
      * </p>
-     *
-     * This may potentially cause message duplication which is up to application developers to resolve.
+     * 这可能会导致消息重复，这取决于应用程序开发人员要解决的问题。
      */
     private int retryTimesWhenSendAsyncFailed = 2;
 
     /**
-     * Indicate whether to retry another broker on sending failure internally.
+     *
+     * 指示是否重试另一个代理在内部发送失败。
      */
     private boolean retryAnotherBrokerWhenNotStoreOK = false;
 
     /**
-     * Maximum allowed message size in bytes.
+     * 允许的最大消息大小(以字节为单位)。
      */
     private int maxMessageSize = 1024 * 1024 * 4; // 4M
 
     /**
-     * Default constructor.
+     * 默认构造函数。
      */
     public DefaultMQProducer() {
         this(MixAll.DEFAULT_PRODUCER_GROUP, null);
     }
 
     /**
-     * Constructor specifying both producer group and RPC hook.
+     * 构造函数，指定生成producerGroup和RPC钩子。
      *
-     * @param producerGroup Producer group, see the name-sake field.
-     * @param rpcHook RPC hook to execute per each remoting command execution.
+     * @param producerGroup Producer group
+     * @param rpcHook RPC钩子。
      */
     public DefaultMQProducer(final String producerGroup, RPCHook rpcHook) {
         this.producerGroup = producerGroup;
@@ -138,18 +132,18 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     }
 
     /**
-     * Constructor specifying producer group.
+     * 构造函数 指定生成RPC钩子。
      *
-     * @param producerGroup Producer group, see the name-sake field.
+     * @param producerGroup
      */
     public DefaultMQProducer(final String producerGroup) {
         this(producerGroup, null);
     }
 
     /**
-     * Constructor specifying the RPC hook.
+     *  构造函数 指定生成RPC钩子。producerGroup使用默认
      *
-     * @param rpcHook RPC hook to execute per each remoting command execution.
+     * @param rpcHook  RPC钩子
      */
     public DefaultMQProducer(RPCHook rpcHook) {
         this(MixAll.DEFAULT_PRODUCER_GROUP, rpcHook);
