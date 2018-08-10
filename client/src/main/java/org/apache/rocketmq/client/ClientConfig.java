@@ -31,15 +31,15 @@ public class ClientConfig {
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     /**
-     * Pulling topic information interval from the named server
+     * 从NameServer中提取主题信息间隔
      */
     private int pollNameServerInterval = 1000 * 30;
     /**
-     * Heartbeat interval in microseconds with message broker
+     * broker 心跳间隔
      */
     private int heartbeatBrokerInterval = 1000 * 30;
     /**
-     * Offset persistent interval for consumer
+     * 消费者的抵消持续间隔
      */
     private int persistConsumerOffsetInterval = 1000 * 5;
     private boolean unitMode = false;

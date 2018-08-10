@@ -40,7 +40,7 @@ public abstract class ConfigManager {
                 return true;
             }
         } catch (Exception e) {
-            log.error("load [{}] failed, and try to load backup file", fileName, e);
+                log.error("load [{}] failed, and try to load backup file", fileName, e);
             return this.loadBak();
         }
     }
