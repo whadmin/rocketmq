@@ -275,29 +275,42 @@ public class DefaultRequestProcessor implements NettyRequestProcessor {
         return response;
     }
 
+    /**
+     * 处理RequestCode.GET_ROUTEINTO_BY_TOPIC
+     * 从namesrv 获取topic 对应的路由信息返回
+     * @param ctx
+     * @param request
+     * @return
+     * @throws RemotingCommandException
+     */
     public RemotingCommand getRouteInfoByTopic(ChannelHandlerContext ctx,
         RemotingCommand request) throws RemotingCommandException {
+        //创建response 类型 RemotingCommand
         final RemotingCommand response = RemotingCommand.createResponseCommand(null);
+        //解析request 类型 RemotingCommand header对象 GetRouteInfoRequestHeader
         final GetRouteInfoRequestHeader requestHeader =
             (GetRouteInfoRequestHeader) request.decodeCommandCustomHeader(GetRouteInfoRequestHeader.class);
 
+        //从namesrv 获取topic 对应的路由信息返回
         TopicRouteData topicRouteData = this.namesrvController.getRouteInfoManager().pickupTopicRouteData(requestHeader.getTopic());
 
         if (topicRouteData != null) {
+            //namesrv开启OrderMessageEnable会从KvConfigManager获取topic对应的配置 brokerName2:queueNum;brokerName2:queueNum;
+            //在发送消息的路由信息优先读取如上配置的路由信息。这样是为保证broker上下线导致路由规则改变导致相同消息无法进入同一个MessageQueue致死消息不能保证绝对顺序
             if (this.namesrvController.getNamesrvConfig().isOrderMessageEnable()) {
                 String orderTopicConf =
                     this.namesrvController.getKvConfigManager().getKVConfig(NamesrvUtil.NAMESPACE_ORDER_TOPIC_CONFIG,
                         requestHeader.getTopic());
                 topicRouteData.setOrderTopicConf(orderTopicConf);
             }
-
+            //topicRouteData 编码设置到response 类型 RemotingCommand body中返回
             byte[] content = topicRouteData.encode();
             response.setBody(content);
             response.setCode(ResponseCode.SUCCESS);
             response.setRemark(null);
             return response;
         }
-
+        //没有没有查询到路由信息返回code  ResponseCode.TOPIC_NOT_EXIST
         response.setCode(ResponseCode.TOPIC_NOT_EXIST);
         response.setRemark("No topic route info in name server for the topic: " + requestHeader.getTopic()
             + FAQUrl.suggestTodo(FAQUrl.APPLY_TOPIC_URL));

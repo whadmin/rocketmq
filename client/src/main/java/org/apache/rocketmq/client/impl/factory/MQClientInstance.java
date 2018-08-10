@@ -156,6 +156,12 @@ public class MQClientInstance {
             MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
 
+    /**
+     * TopicRouteData 转换  TopicPublishInfo
+     * @param topic
+     * @param route
+     * @return
+     */
     public static TopicPublishInfo topicRouteData2TopicPublishInfo(final String topic, final TopicRouteData route) {
         TopicPublishInfo info = new TopicPublishInfo();
         info.setTopicRouteData(route);
@@ -585,6 +591,15 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 从NamerServer 获取topic 对应的路由信息topicRouteData
+     *
+     * 保存于本地
+     * @param topic
+     * @param isDefault
+     * @param defaultMQProducer
+     * @return
+     */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
         DefaultMQProducer defaultMQProducer) {
         try {
