@@ -20,8 +20,11 @@
  */
 package org.apache.rocketmq.common.protocol.route;
 
+/**
+ * QueueData 用来描述一个Broker节点内MessageQueue分配规则和数据同步方式
+ */
 public class QueueData implements Comparable<QueueData> {
-    // 队列所属的Broker名称
+    // Broker名称
     private String brokerName;
     // 读队列数量
     private int readQueueNums;
@@ -31,8 +34,7 @@ public class QueueData implements Comparable<QueueData> {
     private int perm;
     /**
      * 该字段对应TopicConfig.topicSysFlag
-     * 由创建Topic时-u/-s参数指定，不知道有何作用
-     * 参照：https://github.com/alibaba/RocketMQ/issues/206
+     * Master和Slave 数据同步方式
      */
     private int topicSynFlag;
 

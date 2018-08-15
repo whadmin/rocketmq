@@ -27,9 +27,9 @@ public class MQFaultStrategy {
     private final LatencyFaultTolerance<String> latencyFaultTolerance = new LatencyFaultToleranceImpl();
 
     private boolean sendLatencyFaultEnable = false;
-
     private long[] latencyMax = {50L, 100L, 550L, 1000L, 2000L, 3000L, 15000L};
     private long[] notAvailableDuration = {0L, 0L, 30000L, 60000L, 120000L, 180000L, 600000L};
+
 
     public long[] getNotAvailableDuration() {
         return notAvailableDuration;
@@ -39,6 +39,7 @@ public class MQFaultStrategy {
         this.notAvailableDuration = notAvailableDuration;
     }
 
+
     public long[] getLatencyMax() {
         return latencyMax;
     }
@@ -46,6 +47,8 @@ public class MQFaultStrategy {
     public void setLatencyMax(final long[] latencyMax) {
         this.latencyMax = latencyMax;
     }
+
+
 
     public boolean isSendLatencyFaultEnable() {
         return sendLatencyFaultEnable;
