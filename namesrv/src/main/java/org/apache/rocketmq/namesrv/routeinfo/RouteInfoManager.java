@@ -484,6 +484,10 @@ public class RouteInfoManager {
         return null;
     }
 
+    /**
+     * 扫描NameServer内brokerLiveTable，查看所有Broker物理机器状态。如果超时关闭掉和Broker的连接
+     * 调用onChannelDestroy
+     */
     public void scanNotActiveBroker() {
         Iterator<Entry<String, BrokerLiveInfo>> it = this.brokerLiveTable.entrySet().iterator();
         while (it.hasNext()) {
