@@ -86,14 +86,16 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final Random random = new Random();
     private final DefaultMQProducer defaultMQProducer;
 
-    //
+    //topic 对应发送路由信息TopicPublishInfo【通过tryToFindTopicPublishInfo从namesrv获取TopicRouteData转换得到】
     private final ConcurrentMap<String/* topic */, TopicPublishInfo> topicPublishInfoTable =
         new ConcurrentHashMap<String, TopicPublishInfo>();
     private final ArrayList<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
     private final RPCHook rpcHook;
     protected BlockingQueue<Runnable> checkRequestQueue;
     protected ExecutorService checkExecutor;
+    //描述DefaultMQProducerImpl 启动状态
     private ServiceState serviceState = ServiceState.CREATE_JUST;
+    //描述MQ 远程客户端实例
     private MQClientInstance mQClientFactory;
     private ArrayList<CheckForbiddenHook> checkForbiddenHookList = new ArrayList<CheckForbiddenHook>();
     private int zipCompressLevel = Integer.parseInt(System.getProperty(MixAll.MESSAGE_COMPRESS_LEVEL, "5"));
@@ -136,23 +138,39 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         log.info("register sendMessage Hook, {}", hook.hookName());
     }
 
+
+    /**
+     * 启动DefaultMQProducerImpl
+     * @throws MQClientException
+     */
     public void start() throws MQClientException {
         this.start(true);
     }
 
+
+    /**
+     * 启动DefaultMQProducerImpl
+     * @param startFactory  是否启动DefaultMQProducerImpl 内部 MQClientInstance【用来作为mq远程调用客户端实例】
+     * @throws MQClientException
+     */
     public void start(final boolean startFactory) throws MQClientException {
         switch (this.serviceState) {
             case CREATE_JUST:
+                //设置DefaultMQProducerImpl状态 启动失败
                 this.serviceState = ServiceState.START_FAILED;
-
+                //校验ProducerGroup 名称
                 this.checkConfig();
 
+                //如果ProducerGroup 不是内部MixAll.CLIENT_INNER_PRODUCER_GROUP，且没有设置InstanceName,修改InstanceName为客户端的进程ID
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
 
+                //通过MQClientManager创建一个mq远程客户端对象MQClientInstance【MQClientManager用来管理创建MQClientInstance，针对每一个唯一的客户端对应的MQClientInstance是唯一的】
+                //MQClientInstance 内部会有一个MixAll.CLIENT_INNER_PRODUCER_GROUP 默认DefaultMQProducerImpl【用来做什么后面会说】
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQProducer, rpcHook);
 
+                //将DefaultMQProducerImpl注册到 MQClientInstance.producerTable中
                 boolean registerOK = mQClientFactory.registerProducer(this.defaultMQProducer.getProducerGroup(), this);
                 if (!registerOK) {
                     this.serviceState = ServiceState.CREATE_JUST;
@@ -161,14 +179,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                         null);
                 }
 
+                //给当前DefaultMQProducerImpl 注册一个默认的topic【DEFAULT_TOPIC = "TBW102"】和发送topic路由信息TopicPublishInfo，
+                //mq在生成环境一般在发送消息前一般需要申请topic，消息发送topic消息才会有broker去处理。而我们在测试环境为了快捷可以设置发送者自动创建topic.
+                //我们通过MQClientInstance 获取topic路由信息，找不到情况会使用DEFAULT_TOPIC = "TBW102"，和MQClientInstance内部DefaultMQProducerImpl，从namesrv获取"TBW102"默认模板
                 this.topicPublishInfoTable.put(this.defaultMQProducer.getCreateTopicKey(), new TopicPublishInfo());
 
+                //是否启动MQClientInstance ,MQClientInstance启动内部的默认DefaultMQProducerImpl  startFactory为false
                 if (startFactory) {
                     mQClientFactory.start();
                 }
 
                 log.info("the producer [{}] start OK. sendMessageWithVIPChannel={}", this.defaultMQProducer.getProducerGroup(),
                     this.defaultMQProducer.isSendMessageWithVIPChannel());
+                //设置DefaultMQProducerImpl状态 启动正常
                 this.serviceState = ServiceState.RUNNING;
                 break;
             case RUNNING:
@@ -185,6 +208,10 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
     }
 
+    /**
+     * 校验ProducerGroup 名称
+     * @throws MQClientException
+     */
     private void checkConfig() throws MQClientException {
         Validators.checkGroup(this.defaultMQProducer.getProducerGroup());
 
@@ -198,10 +225,19 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
     }
 
+    /**
+     * 关闭DefaultMQProducerImpl
+     */
     public void shutdown() {
         this.shutdown(true);
     }
 
+
+    /**
+     * 关闭DefaultMQProducerImpl
+     *
+     * MQClientInstance关闭内部的默认DefaultMQProducerImpl  shutdownFactory为false
+     */
     public void shutdown(final boolean shutdownFactory) {
         switch (this.serviceState) {
             case CREATE_JUST:
@@ -222,6 +258,25 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         }
     }
 
+
+    /**
+     * DefaultMQProducerImpl状态是否启动OK
+     * @throws MQClientException
+     */
+    private void makeSureStateOK() throws MQClientException {
+        if (this.serviceState != ServiceState.RUNNING) {
+            throw new MQClientException("The producer service state not OK, "
+                    + this.serviceState
+                    + FAQUrl.suggestTodo(FAQUrl.CLIENT_SERVICE_NOT_OK),
+                    null);
+        }
+    }
+
+    /**
+     * 获取DefaultMQProducerImpl 管理的topic.
+     * 每次放松message都会将topic对应方路由信息保存在DefaultMQProducerImpl
+     * @return
+     */
     @Override
     public Set<String> getPublishTopicList() {
         Set<String> topicList = new HashSet<String>();
@@ -232,6 +287,12 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return topicList;
     }
 
+
+    /**
+     * 获取topic 发送路由信息。且路由信息中可以找到MessageQueue
+     * @param topic
+     * @return
+     */
     @Override
     public boolean isPublishTopicNeedUpdate(String topic) {
         TopicPublishInfo prev = this.topicPublishInfoTable.get(topic);
@@ -239,6 +300,27 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         return null == prev || !prev.ok();
     }
 
+
+    /**
+     * 更新topic 发送路由信息
+     * @param topic
+     * @param info
+     */
+    @Override
+    public void updateTopicPublishInfo(final String topic, final TopicPublishInfo info) {
+        if (info != null && topic != null) {
+            TopicPublishInfo prev = this.topicPublishInfoTable.put(topic, info);
+            if (prev != null) {
+                log.info("updateTopicPublishInfo prev is not null, " + prev.toString());
+            }
+        }
+    }
+
+
+    /**
+     * 获取事务消息回调监听
+     * @return
+     */
     @Override
     public TransactionCheckListener checkListener() {
         if (this.defaultMQProducer instanceof TransactionMQProducer) {
@@ -330,20 +412,20 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     @Override
-    public void updateTopicPublishInfo(final String topic, final TopicPublishInfo info) {
-        if (info != null && topic != null) {
-            TopicPublishInfo prev = this.topicPublishInfoTable.put(topic, info);
-            if (prev != null) {
-                log.info("updateTopicPublishInfo prev is not null, " + prev.toString());
-            }
-        }
-    }
-
-    @Override
     public boolean isUnitMode() {
         return this.defaultMQProducer.isUnitMode();
     }
 
+
+    /**
+     * DefaultMQProducerImpl通过获取namesrv以后路由信息配置，通知路由信息中每一个borke节点 创建queueNum个MessageQueue用来保存消息
+     *
+     * 我们需要先调用createTopic
+     * @param key
+     * @param newTopic
+     * @param queueNum
+     * @throws MQClientException
+     */
     public void createTopic(String key, String newTopic, int queueNum) throws MQClientException {
         createTopic(key, newTopic, queueNum, 0);
     }
@@ -355,14 +437,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         this.mQClientFactory.getMQAdminImpl().createTopic(key, newTopic, queueNum, topicSysFlag);
     }
 
-    private void makeSureStateOK() throws MQClientException {
-        if (this.serviceState != ServiceState.RUNNING) {
-            throw new MQClientException("The producer service state not OK, "
-                + this.serviceState
-                + FAQUrl.suggestTodo(FAQUrl.CLIENT_SERVICE_NOT_OK),
-                null);
-        }
-    }
+
 
     public List<MessageQueue> fetchPublishMessageQueues(String topic) throws MQClientException {
         this.makeSureStateOK();

@@ -22,12 +22,22 @@ import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
 
 /**
- * Client Common configuration
+ * 客户端通用配置类,描述Producer，Consumer通用配置信息
+ * ClientConfig (org.apache.rocketmq.client)
+ *     DefaultMQAdminExt (org.apache.rocketmq.tools.admin)
+ *     DefaultMQProducer (org.apache.rocketmq.client.producer)
+ *         TransactionMQProducer (org.apache.rocketmq.client.producer)
+ *     DefaultMQPullConsumer (org.apache.rocketmq.client.consumer)
+ *     DefaultMQPushConsumer (org.apache.rocketmq.client.consumer)
  */
 public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
     private String namesrvAddr = System.getProperty(MixAll.NAMESRV_ADDR_PROPERTY, System.getenv(MixAll.NAMESRV_ADDR_ENV));
     private String clientIP = RemotingUtil.getLocalAddress();
+
+    /**
+     * 客户端名称
+     */
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
     private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
     /**
@@ -42,12 +52,24 @@ public class ClientConfig {
      * 消费者的抵消持续间隔
      */
     private int persistConsumerOffsetInterval = 1000 * 5;
+    /**
+     * 是否单元化
+     */
     private boolean unitMode = false;
+
+    /**
+     * 单元化名称
+     */
     private String unitName;
+
     private boolean vipChannelEnabled = Boolean.parseBoolean(System.getProperty(SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY, "true"));
 
     private boolean useTLS = TlsSystemConfig.tlsEnable;
 
+    /**
+     * 生成一个客户端id  规则为 IP@instanceName
+     * @return
+     */
     public String buildMQClientId() {
         StringBuilder sb = new StringBuilder();
         sb.append(this.getClientIP());
@@ -78,12 +100,19 @@ public class ClientConfig {
         this.instanceName = instanceName;
     }
 
+    /**
+     * 修改instanceName为客户端进程ID
+     */
     public void changeInstanceNameToPID() {
         if (this.instanceName.equals("DEFAULT")) {
             this.instanceName = String.valueOf(UtilAll.getPid());
         }
     }
 
+    /**
+     * 通过参数ClientConfig cc 重置当前对象ClientConfig配置
+     * @param cc
+     */
     public void resetClientConfig(final ClientConfig cc) {
         this.namesrvAddr = cc.namesrvAddr;
         this.clientIP = cc.clientIP;
@@ -98,6 +127,10 @@ public class ClientConfig {
         this.useTLS = cc.useTLS;
     }
 
+    /**
+     * 克隆一个当前对象ClientConfig
+     * @return
+     */
     public ClientConfig cloneClientConfig() {
         ClientConfig cc = new ClientConfig();
         cc.namesrvAddr = namesrvAddr;
