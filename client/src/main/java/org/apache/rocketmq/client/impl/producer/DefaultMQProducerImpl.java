@@ -161,7 +161,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                 //校验ProducerGroup 名称
                 this.checkConfig();
 
-                //如果ProducerGroup 不是内部MixAll.CLIENT_INNER_PRODUCER_GROUP，且没有设置InstanceName,修改InstanceName为客户端的进程ID
+                //如果ProducerGroup 名称不是MixAll.CLIENT_INNER_PRODUCER_GROUP，且没有设置InstanceName,修改InstanceName为客户端的进程ID
                 if (!this.defaultMQProducer.getProducerGroup().equals(MixAll.CLIENT_INNER_PRODUCER_GROUP)) {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
@@ -418,9 +418,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
 
 
     /**
-     * DefaultMQProducerImpl通过获取namesrv以后路由信息配置，通知路由信息中每一个borke节点 创建queueNum个MessageQueue用来保存消息
-     *
-     * 我们需要先调用createTopic
+     * Producer 向申请Topic接口
      * @param key
      * @param newTopic
      * @param queueNum
@@ -430,6 +428,17 @@ public class DefaultMQProducerImpl implements MQProducerInner {
         createTopic(key, newTopic, queueNum, 0);
     }
 
+    /**
+     *  与{@link #createTopic（String key, String newTopic, int queueNum）} 的实现，更细力度的设置消息过程中的同步方式
+     *  topicSysFlag
+     *  #- ASYNC_MASTER 异步复制Master
+     *  #- SYNC_MASTER 同步双写Master
+     * @param key
+     * @param newTopic
+     * @param queueNum
+     * @param topicSysFlag
+     * @throws MQClientException
+     */
     public void createTopic(String key, String newTopic, int queueNum, int topicSysFlag) throws MQClientException {
         this.makeSureStateOK();
         Validators.checkTopic(newTopic);

@@ -59,6 +59,8 @@ public class TransactionMQProducer extends DefaultMQProducer {
         return this.defaultMQProducerImpl.sendMessageInTransaction(msg, tranExecuter, arg);
     }
 
+
+
     public TransactionCheckListener getTransactionCheckListener() {
         return transactionCheckListener;
     }
