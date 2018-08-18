@@ -62,6 +62,9 @@ public class ClientConfig {
      */
     private String unitName;
 
+    /**
+     * 是否开启连接 broker vip通道
+     */
     private boolean vipChannelEnabled = Boolean.parseBoolean(System.getProperty(SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY, "true"));
 
     private boolean useTLS = TlsSystemConfig.tlsEnable;

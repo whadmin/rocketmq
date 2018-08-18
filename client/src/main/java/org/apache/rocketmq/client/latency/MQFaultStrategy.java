@@ -24,7 +24,6 @@ import org.slf4j.Logger;
 
 /**
  * RocketMQ是通过MQFaultStrategy的selectOneMessageQueue方法来选择发送队列的
- *
  */
 public class MQFaultStrategy {
     private final static Logger log = ClientLogger.getLog();
@@ -68,7 +67,7 @@ public class MQFaultStrategy {
     }
 
     /**
-     * 根据 Topic发布信息 选择一个消息队列
+     * 根据 Topic发送路由信息 选择一个消息队列
      * @param tpInfo
      * @param lastBrokerName
      * @return
