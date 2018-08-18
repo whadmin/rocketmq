@@ -75,8 +75,14 @@ public class NamesrvStartup {
                 System.exit(-1);
                 return null;
             }
-            // 初始化NamesrvConfig和NettyServerConfig
+
+            /**
+             * 初始化NamesrvConfig
+             */
             final NamesrvConfig namesrvConfig = new NamesrvConfig();
+            /**
+             * 初始化NettyServerConfig
+             */
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
 
             // Name Server的端口定为9876

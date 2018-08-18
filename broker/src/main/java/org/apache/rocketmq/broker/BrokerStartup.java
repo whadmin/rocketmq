@@ -79,33 +79,63 @@ public class BrokerStartup {
     }
 
     public static BrokerController createBrokerController(String[] args) {
+        // 设置版本号[rocketmq.remoting.version -> MQVersion.CURRENT_VERSION]
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
-
+        //设置netty socket发送缓存大小
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
             NettySystemConfig.socketSndbufSize = 131072;
         }
-
+        //设置netty 接收缓存大小
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_RCVBUF_SIZE)) {
             NettySystemConfig.socketRcvbufSize = 131072;
         }
 
         try {
-            //PackageConflictDetect.detectFastjson();
+            /**
+             * 构造org.apache.commons.cli.Options
+             * 并且添加-h -n参数
+             * -h 打印帮助信息
+             * -h 指定Name Server地址
+             */
             Options options = ServerUtil.buildCommandlineOptions(new Options());
+
+            /**
+             * 使用org.apache.commons.cli.PosixParser解析器和构造Options命令模板解析args得到 commandLine
+             * buildCommandlineOptions 在Options中添加-c -p -m参数
+             * -c 指定Name Server配置文件
+             * -p 打印配置信息
+             * -m 打印导入配置信息
+             */
             commandLine = ServerUtil.parseCmdLine("mqbroker", args, buildCommandlineOptions(options),
                 new PosixParser());
             if (null == commandLine) {
                 System.exit(-1);
             }
 
+            /**
+             * 初始化brokerConfig
+             */
             final BrokerConfig brokerConfig = new BrokerConfig();
+            /**
+             * 初始化nettyServerConfig
+             */
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+            /**
+             * 初始化nettyClientConfig
+             */
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
+            /**
+             * 初始化messageStoreConfig
+             */
+            final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
 
+            //设置nettyServerConfig TLS
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
+
+            //设置nettyServerConfig 监听端口
             nettyServerConfig.setListenPort(10911);
-            final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
+
 
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
                 int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
