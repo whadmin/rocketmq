@@ -166,8 +166,8 @@ public class DefaultMQProducerImpl implements MQProducerInner {
                     this.defaultMQProducer.changeInstanceNameToPID();
                 }
 
-                //通过MQClientManager创建一个mq远程客户端对象MQClientInstance【MQClientManager用来管理创建MQClientInstance，针对每一个唯一的客户端对应的MQClientInstance是唯一的】
-                //MQClientInstance 内部会有一个MixAll.CLIENT_INNER_PRODUCER_GROUP 默认DefaultMQProducerImpl【用来做什么后面会说】
+                //通过MQClientManager创建一个mq远程客户端对象MQClientInstance【MQClientManager用来管理创建MQClientInstance，每一个唯一的客户端对应的MQClientInstance是唯一的】
+                //MQClientInstance 内部会有一个MixAll.CLIENT_INNER_PRODUCER_GROUP 默认DefaultMQProducerImpl【用来支持Producer发送消息生成topic】
                 this.mQClientFactory = MQClientManager.getInstance().getAndCreateMQClientInstance(this.defaultMQProducer, rpcHook);
 
                 //将DefaultMQProducerImpl注册到 MQClientInstance.producerTable中
