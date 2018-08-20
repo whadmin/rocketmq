@@ -43,6 +43,9 @@ public class BrokerConfig {
     private long brokerId = MixAll.MASTER_ID;
     private int brokerPermission = PermName.PERM_READ | PermName.PERM_WRITE;
     private int defaultTopicQueueNums = 8;
+    /**
+     * 是否开启自动创建topic,在broker会添加一个默认MixAll.DEFAULT_TOPIC 和对应TopicConfig
+     */
     @ImportantField
     private boolean autoCreateTopicEnable = true;
 

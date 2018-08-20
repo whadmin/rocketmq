@@ -21,11 +21,18 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 配置管理器
+ */
 public abstract class ConfigManager {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
     public abstract String encode();
 
+    /**
+     * 加载配置文件
+     * @return
+     */
     public boolean load() {
         String fileName = null;
         try {
@@ -45,8 +52,16 @@ public abstract class ConfigManager {
         }
     }
 
+    /**
+     * 配置文件路径
+     * @return
+     */
     public abstract String configFilePath();
 
+    /**
+     * 加载${configFile}.bak文件
+     * @return
+     */
     private boolean loadBak() {
         String fileName = null;
         try {
@@ -65,8 +80,23 @@ public abstract class ConfigManager {
         return true;
     }
 
+    /**
+     * 编码
+     * @param jsonString
+     */
     public abstract void decode(final String jsonString);
 
+    /**
+     * 编码
+     * @param prettyFormat
+     * @return
+     */
+    public abstract String encode(final boolean prettyFormat);
+
+
+    /**
+     * 将当前编码的内容，持久化到configFile文件
+     */
     public synchronized void persist() {
         String jsonString = this.encode(true);
         if (jsonString != null) {
@@ -78,6 +108,4 @@ public abstract class ConfigManager {
             }
         }
     }
-
-    public abstract String encode(final boolean prettyFormat);
 }
