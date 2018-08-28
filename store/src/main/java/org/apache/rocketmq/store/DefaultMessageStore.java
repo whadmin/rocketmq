@@ -61,40 +61,94 @@ import org.slf4j.LoggerFactory;
 import static org.apache.rocketmq.store.config.BrokerRole.SLAVE;
 
 public class DefaultMessageStore implements MessageStore {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    /**
+     * 消息存储相关配置
+     */
     private final MessageStoreConfig messageStoreConfig;
-    // CommitLog
+    /**
+     * 核心处理类
+     */
     private final CommitLog commitLog;
 
+    /**
+     * topic对应的消费队列
+     */
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
 
+    /**
+     * 刷盘服务线程
+     */
     private final FlushConsumeQueueService flushConsumeQueueService;
 
+    /**
+     * 定时清除CommitLog服务线程
+     */
     private final CleanCommitLogService cleanCommitLogService;
 
+    /**
+     * 定时清除ConsumeQueue服务线程
+     */
     private final CleanConsumeQueueService cleanConsumeQueueService;
 
+    /**
+     * 索引服务
+     */
     private final IndexService indexService;
 
+    /**
+     * MappedFile分配线程，RocketMQ使用内存映射处理commitlog,consumeQueue文件
+     */
     private final AllocateMappedFileService allocateMappedFileService;
 
+    /**
+     * 重试存储消息服务现场
+     */
     private final ReputMessageService reputMessageService;
 
+    /**
+     * 主从同步实现服务
+     */
     private final HAService haService;
 
+    /**
+     * 定时任务调度器，执行定时任务，主要是处理定时任务。
+     */
     private final ScheduleMessageService scheduleMessageService;
 
+    /**
+     * 存储统计服务
+     *
+     */
     private final StoreStatsService storeStatsService;
 
+    /**
+     * DataBuffer池
+     *
+     */
     private final TransientStorePool transientStorePool;
 
+    /**
+     * 存储服务状态
+     */
     private final RunningFlags runningFlags = new RunningFlags();
     private final SystemClock systemClock = new SystemClock();
 
     private final ScheduledExecutorService scheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
+
+
+    /**
+     * Broker统计服务
+     */
     private final BrokerStatsManager brokerStatsManager;
+
+
+    /**
+     * 消息达到监听器
+     */
     private final MessageArrivingListener messageArrivingListener;
     private final BrokerConfig brokerConfig;
 
@@ -176,10 +230,8 @@ public class DefaultMessageStore implements MessageStore {
                 result = result && this.scheduleMessageService.load();
             }
 
-            // load Commit Log
             result = result && this.commitLog.load();
 
-            // load Consume Queue
             result = result && this.loadConsumeQueue();
 
             if (result) {
@@ -202,6 +254,40 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         return result;
+    }
+
+    private void recover(final boolean lastExitOK) {
+        this.recoverConsumeQueue();
+
+        if (lastExitOK) {
+            this.commitLog.recoverNormally();
+        } else {
+            this.commitLog.recoverAbnormally();
+        }
+
+        this.recoverTopicQueueTable();
+    }
+
+    private void recoverConsumeQueue() {
+        for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
+            for (ConsumeQueue logic : maps.values()) {
+                logic.recover();
+            }
+        }
+    }
+
+    private void recoverTopicQueueTable() {
+        HashMap<String/* topic-queueid */, Long/* offset */> table = new HashMap<String, Long>(1024);
+        long minPhyOffset = this.commitLog.getMinOffset();
+        for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
+            for (ConsumeQueue logic : maps.values()) {
+                String key = logic.getTopic() + "-" + logic.getQueueId();
+                table.put(key, logic.getMaxOffsetInQueue());
+                logic.correctMinOffset(minPhyOffset);
+            }
+        }
+
+        this.commitLog.setTopicQueueTable(table);
     }
 
     /**
@@ -1275,17 +1361,7 @@ public class DefaultMessageStore implements MessageStore {
         return true;
     }
 
-    private void recover(final boolean lastExitOK) {
-        this.recoverConsumeQueue();
 
-        if (lastExitOK) {
-            this.commitLog.recoverNormally();
-        } else {
-            this.commitLog.recoverAbnormally();
-        }
-
-        this.recoverTopicQueueTable();
-    }
 
     public MessageStoreConfig getMessageStoreConfig() {
         return messageStoreConfig;
@@ -1306,27 +1382,9 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
-    private void recoverConsumeQueue() {
-        for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
-            for (ConsumeQueue logic : maps.values()) {
-                logic.recover();
-            }
-        }
-    }
 
-    private void recoverTopicQueueTable() {
-        HashMap<String/* topic-queueid */, Long/* offset */> table = new HashMap<String, Long>(1024);
-        long minPhyOffset = this.commitLog.getMinOffset();
-        for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
-            for (ConsumeQueue logic : maps.values()) {
-                String key = logic.getTopic() + "-" + logic.getQueueId();
-                table.put(key, logic.getMaxOffsetInQueue());
-                logic.correctMinOffset(minPhyOffset);
-            }
-        }
 
-        this.commitLog.setTopicQueueTable(table);
-    }
+
 
     public AllocateMappedFileService getAllocateMappedFileService() {
         return allocateMappedFileService;

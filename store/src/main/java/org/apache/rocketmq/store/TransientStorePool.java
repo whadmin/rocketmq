@@ -44,7 +44,7 @@ public class TransientStorePool {
     }
 
     /**
-     * It's a heavy init method.
+     *初始化函数，分配poolSize个fileSize的堆外空间
      */
     public void init() {
         for (int i = 0; i < poolSize; i++) {
@@ -58,6 +58,10 @@ public class TransientStorePool {
         }
     }
 
+    /**
+     * 销毁availableBuffers中所有buffer数据
+     *
+     */
     public void destroy() {
         for (ByteBuffer byteBuffer : availableBuffers) {
             final long address = ((DirectBuffer) byteBuffer).address();
@@ -66,12 +70,20 @@ public class TransientStorePool {
         }
     }
 
+    /**
+     * 用完了之后,返还一个buffer,对buffer数据进行清理
+     * @param byteBuffer
+     */
     public void returnBuffer(ByteBuffer byteBuffer) {
         byteBuffer.position(0);
         byteBuffer.limit(fileSize);
         this.availableBuffers.offerFirst(byteBuffer);
     }
 
+    /**
+     * 借一个buffer出去
+     * @return
+     */
     public ByteBuffer borrowBuffer() {
         ByteBuffer buffer = availableBuffers.pollFirst();
         if (availableBuffers.size() < poolSize * 0.4) {
@@ -80,6 +92,10 @@ public class TransientStorePool {
         return buffer;
     }
 
+    /**
+     * 剩余可用的buffers数量
+     * @return
+     */
     public int remainBufferNumbs() {
         if (storeConfig.isTransientStorePoolEnable()) {
             return availableBuffers.size();

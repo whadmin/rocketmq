@@ -33,16 +33,33 @@ public class MappedFileQueue {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     private static final Logger LOG_ERROR = LoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
+    /**
+     * 一次最多删除的文件数量
+     */
     private static final int DELETE_FILES_BATCH_MAX = 10;
 
+    /**
+     * 文件队列的存储路径
+     *
+     */
     private final String storePath;
 
+    /**
+     * 一个mappedFile文件大小,见MessageStoreConfig.mapedFileSizeCommitLog，默认1G
+     */
     private final int mappedFileSize;
 
+
+    /**
+     * 写时复制,
+     */
     private final CopyOnWriteArrayList<MappedFile> mappedFiles = new CopyOnWriteArrayList<MappedFile>();
 
     private final AllocateMappedFileService allocateMappedFileService;
 
+    /**
+     * 已经flush到的位置(是某一个mappedFile中的一个位置)
+     */
     private long flushedWhere = 0;
     private long committedWhere = 0;
 
