@@ -45,39 +45,139 @@ public class MappedFile extends ReferenceResource {
     public static final int OS_PAGE_SIZE = 1024 * 4;
     protected static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    /**
+     * 占用内存大小
+     */
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
 
-    private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
-    protected final AtomicInteger wrotePosition = new AtomicInteger(0);
-    //ADD BY ChenYang
-    protected final AtomicInteger committedPosition = new AtomicInteger(0);
-    private final AtomicInteger flushedPosition = new AtomicInteger(0);
-    protected int fileSize;
-    protected FileChannel fileChannel;
     /**
-     * Message will put to here first, and then reput to FileChannel if writeBuffer is not null.
+     * 文件数
      */
+    private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
+
+    /**
+     * 写到的位置，当值==fileSize代表文件写满了
+     */
+    protected final AtomicInteger wrotePosition = new AtomicInteger(0);
+    /**
+     * 当writeBuffer为空时，就不会有真正的commit行为
+     * wrotePosition意义上就代表了committedPosition，真正的committedPosition值只会为初始值0,参考commit函数
+     */
+    protected final AtomicInteger committedPosition = new AtomicInteger(0);
+    /**
+     * 刷盘刷到的位置
+     */
+    private final AtomicInteger flushedPosition = new AtomicInteger(0);
+    /**
+     * mappedFile文件大小，参照MessageStoreConfig.mapedFileSizeCommitLog，默认1G
+     */
+    protected int fileSize;
+
+    protected FileChannel fileChannel;
     protected ByteBuffer writeBuffer = null;
+
+
+    /**
+     * ByteBuffer池对象
+     */
     protected TransientStorePool transientStorePool = null;
-    private String fileName;
+
+
+    /**
+     * fileFromOffset 表示MappedFile文件名称是一个12位的数值，同时也表示文件存储的初始偏移
+     * 00000000000000000000   初始偏移是 0   存储 0~ fileSize
+     * 00000000001073741824   初始偏移是 1073741824   存储 fileSize~fileSize*2
+     */
     private long fileFromOffset;
+
+    /**
+     * MappedFile文件名 于fileFromOffset一致
+     */
+    private String fileName;
+
+
     private File file;
     private MappedByteBuffer mappedByteBuffer;
     private volatile long storeTimestamp = 0;
     private boolean firstCreateInQueue = false;
 
+    /**
+     * 构建MappedFile
+     */
     public MappedFile() {
     }
 
+    /**
+     * 构建MappedFile,初始化文件名，大小
+     */
     public MappedFile(final String fileName, final int fileSize) throws IOException {
         init(fileName, fileSize);
     }
 
+    /**
+     * 构建MappedFile,初始化文件名，大小，ByteBuffer池对象
+     */
     public MappedFile(final String fileName, final int fileSize,
-        final TransientStorePool transientStorePool) throws IOException {
+                      final TransientStorePool transientStorePool) throws IOException {
         init(fileName, fileSize, transientStorePool);
     }
 
+    /**
+     * 初始化MappedFile
+     * fileName 文件名，
+     * fileSize 大小
+     */
+    private void init(final String fileName, final int fileSize) throws IOException {
+        //设置文件名称
+        this.fileName = fileName;
+        //设置文件大小
+        this.fileSize = fileSize;
+        //设置文件对象
+        this.file = new File(fileName);
+        //设置文件记录数据的偏移
+        this.fileFromOffset = Long.parseLong(this.file.getName());
+        //设置是否初始化成功
+        boolean ok = false;
+
+        //指定目录是否存在，不存在则创建一个
+        ensureDirOK(this.file.getParent());
+
+        try {
+            this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
+            this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
+            //累计当前broker MappedFile总大小
+            TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);
+            //累计当前broker MappedFile个数
+            TOTAL_MAPPED_FILES.incrementAndGet();
+            ok = true;
+        } catch (FileNotFoundException e) {
+            log.error("create file channel " + this.fileName + " Failed. ", e);
+            throw e;
+        } catch (IOException e) {
+            log.error("map file " + this.fileName + " Failed. ", e);
+            throw e;
+        } finally {
+            if (!ok && this.fileChannel != null) {
+                this.fileChannel.close();
+            }
+        }
+    }
+
+    /**
+     * 初始化MappedFile
+     */
+    public void init(final String fileName, final int fileSize,
+                     final TransientStorePool transientStorePool) throws IOException {
+        init(fileName, fileSize);
+        this.writeBuffer = transientStorePool.borrowBuffer();
+        this.transientStorePool = transientStorePool;
+    }
+
+
+    /**
+     * 指定目录是否存在，不存在则创建一个
+     * @param dirName
+     */
     public static void ensureDirOK(final String dirName) {
         if (dirName != null) {
             File f = new File(dirName);
@@ -88,9 +188,21 @@ public class MappedFile extends ReferenceResource {
         }
     }
 
+    /**
+     * 清理mappedByteBuffer
+     * 如果是directByteBuffer且容量不为0
+     * 则获取attachment转成directByteBuffer，调用其clearner.clean方法
+     */
     public static void clean(final ByteBuffer buffer) {
         if (buffer == null || !buffer.isDirect() || buffer.capacity() == 0)
             return;
+        //下面的逻辑一定是directByteBuffer的
+        /**
+         * 下面这段是
+         * 嵌套拿到directByteBuffer的最内部的attachment，强制转换成ByteBuffer对象(实际运行应该会是directByteBuffer)
+         * 然后获得directByteBuffer的Cleaner对象 cleaner
+         * 然后调用cleaner.clean方法，进行深度的释放资源
+         */
         invoke(invoke(viewed(buffer), "cleaner"), "clean");
     }
 
@@ -117,6 +229,10 @@ public class MappedFile extends ReferenceResource {
         }
     }
 
+    /**
+     * 嵌套调用，获取最深层的attachment 或者 viewedBuffer方法
+     * 转化为ByteBuffer对象
+     */
     private static ByteBuffer viewed(ByteBuffer buffer) {
         String methodName = "viewedBuffer";
 
@@ -127,7 +243,7 @@ public class MappedFile extends ReferenceResource {
                 break;
             }
         }
-
+        //执行DirectByteBuffer.attachment()方法
         ByteBuffer viewedBuffer = (ByteBuffer) invoke(buffer, methodName);
         if (viewedBuffer == null)
             return buffer;
@@ -135,77 +251,75 @@ public class MappedFile extends ReferenceResource {
             return viewed(viewedBuffer);
     }
 
-    public static int getTotalMappedFiles() {
-        return TOTAL_MAPPED_FILES.get();
-    }
+    /**
+     * 参数intervalForcibly代表距离上一次shutdown至少要这么长时间
+     * 调用shutdown
+     * 如果引用清理干净了删除文件，打log
+     * 否则false
+     */
+    public boolean destroy(final long intervalForcibly) {
+        this.shutdown(intervalForcibly);
 
-    public static long getTotalMappedVirtualMemory() {
-        return TOTAL_MAPPED_VIRTUAL_MEMORY.get();
-    }
-
-    public void init(final String fileName, final int fileSize,
-        final TransientStorePool transientStorePool) throws IOException {
-        init(fileName, fileSize);
-        this.writeBuffer = transientStorePool.borrowBuffer();
-        this.transientStorePool = transientStorePool;
-    }
-
-    private void init(final String fileName, final int fileSize) throws IOException {
-        this.fileName = fileName;
-        this.fileSize = fileSize;
-        this.file = new File(fileName);
-        this.fileFromOffset = Long.parseLong(this.file.getName());
-        boolean ok = false;
-
-        ensureDirOK(this.file.getParent());
-
-        try {
-            this.fileChannel = new RandomAccessFile(this.file, "rw").getChannel();
-            this.mappedByteBuffer = this.fileChannel.map(MapMode.READ_WRITE, 0, fileSize);
-            TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(fileSize);
-            TOTAL_MAPPED_FILES.incrementAndGet();
-            ok = true;
-        } catch (FileNotFoundException e) {
-            log.error("create file channel " + this.fileName + " Failed. ", e);
-            throw e;
-        } catch (IOException e) {
-            log.error("map file " + this.fileName + " Failed. ", e);
-            throw e;
-        } finally {
-            if (!ok && this.fileChannel != null) {
+        if (this.isCleanupOver()) {
+            try {
                 this.fileChannel.close();
+                log.info("close file channel " + this.fileName + " OK");
+
+                long beginTime = System.currentTimeMillis();
+                boolean result = this.file.delete();
+                log.info("delete file[REF:" + this.getRefCount() + "] " + this.fileName
+                        + (result ? " OK, " : " Failed, ") + "W:" + this.getWrotePosition() + " M:"
+                        + this.getFlushedPosition() + ", "
+                        + UtilAll.computeEclipseTimeMilliseconds(beginTime));
+            } catch (Exception e) {
+                log.warn("close file channel " + this.fileName + " Failed. ", e);
             }
+
+            return true;
+        } else {
+            log.warn("destroy mapped file[REF:" + this.getRefCount() + "] " + this.fileName
+                    + " Failed. cleanupOver: " + this.cleanupOver);
         }
+
+        return false;
     }
 
-    public long getLastModifiedTimestamp() {
-        return this.file.lastModified();
-    }
 
-    public int getFileSize() {
-        return fileSize;
-    }
-
-    public FileChannel getFileChannel() {
-        return fileChannel;
-    }
-
+    /**
+     * 追加消息
+     * @param msg
+     * @param cb
+     * @return
+     */
     public AppendMessageResult appendMessage(final MessageExtBrokerInner msg, final AppendMessageCallback cb) {
         return appendMessagesInner(msg, cb);
     }
 
+    /**
+     * 追加批量消息
+     * @param messageExtBatch
+     * @param cb
+     * @return
+     */
     public AppendMessageResult appendMessages(final MessageExtBatch messageExtBatch, final AppendMessageCallback cb) {
         return appendMessagesInner(messageExtBatch, cb);
     }
 
+    /**
+     * 追加消息核心实现
+     * @param messageExt
+     * @param cb
+     * @return
+     */
     public AppendMessageResult appendMessagesInner(final MessageExt messageExt, final AppendMessageCallback cb) {
         assert messageExt != null;
         assert cb != null;
-
+        //获取文件的写入指针
         int currentPos = this.wrotePosition.get();
-
+        //文件还有剩余空间
         if (currentPos < this.fileSize) {
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
+            //标记byteBuffer的位置
             byteBuffer.position(currentPos);
             AppendMessageResult result = null;
             if (messageExt instanceof MessageExtBrokerInner) {
@@ -438,33 +552,6 @@ public class MappedFile extends ReferenceResource {
         return true;
     }
 
-    public boolean destroy(final long intervalForcibly) {
-        this.shutdown(intervalForcibly);
-
-        if (this.isCleanupOver()) {
-            try {
-                this.fileChannel.close();
-                log.info("close file channel " + this.fileName + " OK");
-
-                long beginTime = System.currentTimeMillis();
-                boolean result = this.file.delete();
-                log.info("delete file[REF:" + this.getRefCount() + "] " + this.fileName
-                    + (result ? " OK, " : " Failed, ") + "W:" + this.getWrotePosition() + " M:"
-                    + this.getFlushedPosition() + ", "
-                    + UtilAll.computeEclipseTimeMilliseconds(beginTime));
-            } catch (Exception e) {
-                log.warn("close file channel " + this.fileName + " Failed. ", e);
-            }
-
-            return true;
-        } else {
-            log.warn("destroy mapped file[REF:" + this.getRefCount() + "] " + this.fileName
-                + " Failed. cleanupOver: " + this.cleanupOver);
-        }
-
-        return false;
-    }
-
     public int getWrotePosition() {
         return wrotePosition.get();
     }
@@ -573,6 +660,28 @@ public class MappedFile extends ReferenceResource {
     //testable
     File getFile() {
         return this.file;
+    }
+
+    public static int getTotalMappedFiles() {
+        return TOTAL_MAPPED_FILES.get();
+    }
+
+    public static long getTotalMappedVirtualMemory() {
+        return TOTAL_MAPPED_VIRTUAL_MEMORY.get();
+    }
+
+
+
+    public long getLastModifiedTimestamp() {
+        return this.file.lastModified();
+    }
+
+    public int getFileSize() {
+        return fileSize;
+    }
+
+    public FileChannel getFileChannel() {
+        return fileChannel;
     }
 
     @Override

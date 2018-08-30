@@ -20,6 +20,9 @@ import java.util.HashSet;
 import java.util.Set;
 import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 
+/**
+ * 这个类用于将topic列表进行序列化，用于网络传输
+ */
 public class TopicList extends RemotingSerializable {
     private Set<String> topicList = new HashSet<String>();
     private String brokerAddr;

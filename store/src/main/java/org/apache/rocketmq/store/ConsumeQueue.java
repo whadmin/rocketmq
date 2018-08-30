@@ -24,22 +24,45 @@ import org.apache.rocketmq.store.config.StorePathConfigHelper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 消费队列
+ */
 public class ConsumeQueue {
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     public static final int CQ_STORE_UNIT_SIZE = 20;
     private static final Logger LOG_ERROR = LoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
     private final DefaultMessageStore defaultMessageStore;
-
+    /**
+     * 映射文件队列
+     */
     private final MappedFileQueue mappedFileQueue;
+    /**
+     * Topic
+     */
     private final String topic;
+    /**
+     * 队列编号
+     */
     private final int queueId;
+    /**
+     * 消息位置信息ByteBuffer
+     */
     private final ByteBuffer byteBufferIndex;
-
+    /**
+     * 文件存储地址
+     */
     private final String storePath;
+    /**
+     * 每个映射文件大小
+     */
     private final int mappedFileSize;
+    /**
+     * 最大重放消息commitLog存储位置
+     */
     private long maxPhysicOffset = -1;
+
     private volatile long minLogicOffset = 0;
     private ConsumeQueueExt consumeQueueExt = null;
 

@@ -21,18 +21,22 @@ import org.apache.rocketmq.common.annotation.ImportantField;
 import org.apache.rocketmq.store.ConsumeQueue;
 
 public class MessageStoreConfig {
-    //The root directory in which the log data is kept
+    /**
+     *消息数据存储的根目录
+     */
     @ImportantField
     private String storePathRootDir = System.getProperty("user.home") + File.separator + "store";
 
-    //The directory in which the commitlog is kept
+    /**
+     * commitLog存储路径
+     */
     @ImportantField
     private String storePathCommitLog = System.getProperty("user.home") + File.separator + "store"
         + File.separator + "commitlog";
 
-    // CommitLog file size,default is 1G
+    // CommitLog文件大小，默认为1G
     private int mapedFileSizeCommitLog = 1024 * 1024 * 1024;
-    // ConsumeQueue file size,default is 30W
+    // ConsumeQueue文件大小，默认为30W
     private int mapedFileSizeConsumeQueue = 300000 * ConsumeQueue.CQ_STORE_UNIT_SIZE;
     // enable consume queue ext
     private boolean enableConsumeQueueExt = false;
@@ -107,17 +111,28 @@ public class MessageStoreConfig {
     private int maxTransferCountOnMessageInDisk = 8;
     @ImportantField
     private int accessMessageInMemoryMaxRatio = 40;
+    /**
+     * 是否开启消息索引功能
+     */
     @ImportantField
     private boolean messageIndexEnable = true;
     private int maxHashSlotNum = 5000000;
     private int maxIndexNum = 5000000 * 4;
     private int maxMsgsNumBatch = 64;
+    /**
+     * 是否提供安全的消息索引机制，索引保证不丢
+     *
+     */
     @ImportantField
     private boolean messageIndexSafe = false;
     private int haListenPort = 10912;
     private int haSendHeartbeatInterval = 1000 * 5;
     private int haHousekeepingInterval = 1000 * 20;
     private int haTransferBatchSize = 1024 * 32;
+    /**
+     * 在 Slave 上直接设置 Master地址，默认从 Name Server 上自动获取，也可以手工强制配置
+     *
+     */
     @ImportantField
     private String haMasterAddress = null;
     private int haSlaveFallbehindMax = 1024 * 1024 * 256;
@@ -128,6 +143,10 @@ public class MessageStoreConfig {
     private int syncFlushTimeout = 1000 * 5;
     private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h";
     private long flushDelayOffsetInterval = 1000 * 10;
+    /**
+     * 磁盘满、且无过期文件情况下 TRUE 表示强制删除文件，优先保证服务可用; FALSE 标记服务不可用，文件不删除
+     *
+     */
     @ImportantField
     private boolean cleanFileForciblyEnable = true;
     private boolean warmMapedFileEnable = false;

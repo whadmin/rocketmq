@@ -23,36 +23,35 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.message.MessageExtBatch;
 
 /**
- * This class defines contracting interfaces to implement, allowing third-party vendor to use customized message store.
+ * 消息存储获取实现
  */
 public interface MessageStore {
 
     /**
-     * Load previously stored messages.
-     *
+     * 加载以前存储的消息
      * @return true if success; false otherwise.
      */
     boolean load();
 
     /**
-     * Launch this message store.
+     * 启动
      *
      * @throws Exception if there is any error.
      */
     void start() throws Exception;
 
     /**
-     * Shutdown this message store.
+     * 关闭
      */
     void shutdown();
 
     /**
-     * Destroy this message store. Generally, all persistent files should be removed after invocation.
+     * 销毁,调用后删除所有持久性文件。
      */
     void destroy();
 
     /**
-     * Store a message into store.
+     * 将消息存储到文件系统总
      *
      * @param msg Message instance to store
      * @return result of store operation.
@@ -60,7 +59,7 @@ public interface MessageStore {
     PutMessageResult putMessage(final MessageExtBrokerInner msg);
 
     /**
-     * Store a batch of messages.
+     * 将批量消息存储到文件系统总
      *
      * @param messageExtBatch Message batch.
      * @return result of storing batch messages.
@@ -68,8 +67,7 @@ public interface MessageStore {
     PutMessageResult putMessages(final MessageExtBatch messageExtBatch);
 
     /**
-     * Query at most <code>maxMsgNums</code> messages belonging to <code>topic</code> at <code>queueId</code> starting
-     * from given <code>offset</code>. Resulting messages will further be screened using provided message filter.
+     * 在<code> queueId </ code>处查询属于<code> topic </ code>的<code> maxMsgNums </ code>消息，从给定的<code> offset </ code>开始*。, 将使用提供的消息过滤器进一步筛选生成的消息。
      *
      * @param group Consumer group that launches this query.
      * @param topic Topic to query.
