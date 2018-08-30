@@ -39,9 +39,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class NamesrvStartup {
-    //根据启动参数指定的配置文件解析得到的prop
+
+    /**
+     * 根据启动参数指定的配置文件解析得到的prop
+     */
     public static Properties properties = null;
-    //根据args解析出来的CommandLine(CommandLine是apache CLI提供的功能）
+    /**
+     * 根据args解析出来的CommandLine(CommandLine是apache CLI提供的功能）
+     */
     public static CommandLine commandLine = null;
 
     public static void main(String[] args) {
@@ -49,10 +54,15 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController main0(String[] args) {
-        // 设置版本号[rocketmq.remoting.version -> MQVersion.CURRENT_VERSION]
+        /**
+         * 设置版本号[rocketmq.remoting.version -> MQVersion.CURRENT_VERSION]
+         */
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         try {
-            // FastJson版本冲突检测，已被注释
+            /**
+             *  FastJson版本冲突检测，已被注释
+             */
+
             //PackageConflictDetect.detectFastjson();
 
             /**
@@ -108,7 +118,9 @@ public class NamesrvStartup {
                 }
             }
 
-            // 如果命令带有-p参数，则打印出NamesrvConfig、NettyServerConfig的属性,这里logger为null
+            /**
+             * 如果命令带有-p参数，则打印出NamesrvConfig、NettyServerConfig的属性,这里logger为null
+             */
             if (commandLine.hasOption('p')) {
                 MixAll.printObjectProperties(null, namesrvConfig);
                 MixAll.printObjectProperties(null, nettyServerConfig);
@@ -146,8 +158,8 @@ public class NamesrvStartup {
             MixAll.printObjectProperties(log, nettyServerConfig);
 
             /**
-             * 初始化NamesrvController
-             * 该类是Name Server的主要控制类
+             * 构造NamesrvController
+             * 该类是namesrv的主要控制类
              */
             final NamesrvController controller = new NamesrvController(namesrvConfig, nettyServerConfig);
 
@@ -157,14 +169,18 @@ public class NamesrvStartup {
              */
             controller.getConfiguration().registerConfig(properties);
 
-            // 初始化NamesrvController
+            /**
+             * 初始化NamesrvController
+             */
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);
             }
 
-            // 注册ShutdownHook
+            /**
+             * 注册ShutdownHook
+             */
             Runtime.getRuntime().addShutdownHook(new ShutdownHookThread(log, new Callable<Void>() {
                 @Override
                 public Void call() throws Exception {
@@ -173,7 +189,9 @@ public class NamesrvStartup {
                 }
             }));
 
-            // 启动Netty服务
+            /**
+             * 启动Netty服务
+             */
             controller.start();
 
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();

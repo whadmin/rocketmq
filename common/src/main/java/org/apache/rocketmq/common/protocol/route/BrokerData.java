@@ -38,7 +38,7 @@ public class BrokerData implements Comparable<BrokerData> {
     //名称（Broker下可以分为master和slave 有相互关系的master Broker和slave Broker名称相同）
     private String brokerName;
 
-    /** brokerId=0代表master  brokerId>0代表slave 参照MixAll.MASTER_ID*
+    /** brokerId=0代表master  brokerId>0代表slave 参照 MixAll.MASTER_ID*
      *  同一个brokerName下可以有一个Master和多个Slave，
      *  brokerAddrs是一个集合 表示同一个brokerName 下Master和多个Slave的物理地址
      **/
