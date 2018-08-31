@@ -25,22 +25,31 @@ import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 public class MessageExt extends Message {
     private static final long serialVersionUID = 5720810158625748049L;
 
+    /**
+     * 队列id
+     */
     private int queueId;
-
+    //整个存储空间，包含TOTALSIZE,MAGICCODE,BODYCRC等
     private int storeSize;
-
+    //逻辑队列长度
     private long queueOffset;
+    //参考MessageSysFlag类
     private int sysFlag;
     private long bornTimestamp;
     private SocketAddress bornHost;
-
+    //消息产生的时间
     private long storeTimestamp;
+    //存放消息的host
     private SocketAddress storeHost;
+    //消息id
     private String msgId;
+    //物理偏移
     private long commitLogOffset;
+    //CRC验证
     private int bodyCRC;
+    //消费次数(又称为重试的次数)
     private int reconsumeTimes;
-
+    //这个不知道有什么用，似乎不是0就是commitLogOffset,事务?
     private long preparedTransactionOffset;
 
     public MessageExt() {
@@ -55,7 +64,9 @@ public class MessageExt extends Message {
         this.storeHost = storeHost;
         this.msgId = msgId;
     }
-
+    /**
+     * 看是 MULTI_TAG 还是 SINGLE_TAG
+     */
     public static TopicFilterType parseTopicFilterType(final int sysFlag) {
         if ((sysFlag & MessageSysFlag.MULTI_TAGS_FLAG) == MessageSysFlag.MULTI_TAGS_FLAG) {
             return TopicFilterType.MULTI_TAG;
@@ -64,6 +75,12 @@ public class MessageExt extends Message {
         return TopicFilterType.SINGLE_TAG;
     }
 
+    /**
+     * 用于将socket地址写入byteBuffer
+     * @param socketAddress
+     * @param byteBuffer
+     * @return
+     */
     public static ByteBuffer socketAddress2ByteBuffer(final SocketAddress socketAddress, final ByteBuffer byteBuffer) {
         InetSocketAddress inetSocketAddress = (InetSocketAddress) socketAddress;
         byteBuffer.put(inetSocketAddress.getAddress().getAddress(), 0, 4);

@@ -20,15 +20,15 @@ package org.apache.rocketmq.store;
  * When write a message to the commit log, returns results
  */
 public class AppendMessageResult {
-    // Return code
+    // 写入消息状态
     private AppendMessageStatus status;
-    // Where to start writing
+    // 写入的偏移位置【这里的偏移是指相对于commitlog文件下顺序写入偏移位置=fileFromOffset{【写入MappedFile文件名称如00000000001073741824】 + byteBuffer.position()【文件映射byteBuffer写入位置】}
     private long wroteOffset;
-    // Write Bytes
+    // 写入消息字节大小
     private int wroteBytes;
-    // Message ID
+    // 写入消息 ID
     private String msgId;
-    // Message storage timestamp
+    // 写入消息
     private long storeTimestamp;
     // Consume queue's offset(step by one)
     private long logicsOffset;

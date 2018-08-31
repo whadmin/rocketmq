@@ -124,6 +124,16 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * 初始化MappedFile
+     */
+    public void init(final String fileName, final int fileSize,
+                     final TransientStorePool transientStorePool) throws IOException {
+        init(fileName, fileSize);
+        this.writeBuffer = transientStorePool.borrowBuffer();
+        this.transientStorePool = transientStorePool;
+    }
+
+    /**
+     * 初始化MappedFile
      * fileName 文件名，
      * fileSize 大小
      */
@@ -163,15 +173,7 @@ public class MappedFile extends ReferenceResource {
         }
     }
 
-    /**
-     * 初始化MappedFile
-     */
-    public void init(final String fileName, final int fileSize,
-                     final TransientStorePool transientStorePool) throws IOException {
-        init(fileName, fileSize);
-        this.writeBuffer = transientStorePool.borrowBuffer();
-        this.transientStorePool = transientStorePool;
-    }
+
 
 
     /**

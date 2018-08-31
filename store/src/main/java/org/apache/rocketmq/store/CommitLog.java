@@ -362,6 +362,13 @@ public class CommitLog {
         return new DispatchRequest(-1, false /* success */);
     }
 
+    /**
+     * 计算消息存储总字节长度
+     * @param bodyLength
+     * @param topicLength
+     * @param propertiesLength
+     * @return
+     */
     private static int calMsgLength(int bodyLength, int topicLength, int propertiesLength) {
         final int msgLen = 4 //TOTALSIZE
             + 4 //MAGICCODE
@@ -1158,19 +1165,20 @@ public class CommitLog {
     }
 
     class DefaultAppendMessageCallback implements AppendMessageCallback {
-        // File at the end of the minimum fixed length empty
+        // 文件在最小固定长度结束时为空
         private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;
+        // 存储消息Id的Buffer
         private final ByteBuffer msgIdMemory;
-        // Store the message content
+        // 存储消息内容的Buffer
         private final ByteBuffer msgStoreItemMemory;
-        // The maximum length of the message
-        private final int maxMessageSize;
-        // Build Message Key
-        private final StringBuilder keyBuilder = new StringBuilder();
-
-        private final StringBuilder msgIdBuilder = new StringBuilder();
-
+        // 存储消息写入brokersocker地址的Buffer
         private final ByteBuffer hostHolder = ByteBuffer.allocate(8);
+
+        // 单个消息存储在文件中的最大大小，默认为512K 从defaultMessageStore.getMessageStoreConfig().getMaxMessageSize()获取
+        private final int maxMessageSize;
+
+        private final StringBuilder keyBuilder = new StringBuilder();
+        private final StringBuilder msgIdBuilder = new StringBuilder();
 
         DefaultAppendMessageCallback(final int size) {
             this.msgIdMemory = ByteBuffer.allocate(MessageDecoder.MSG_ID_LENGTH);
@@ -1184,15 +1192,15 @@ public class CommitLog {
 
         public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
             final MessageExtBrokerInner msgInner) {
-            // STORETIMESTAMP + STOREHOSTADDRESS + OFFSET <br>
 
-            // PHY OFFSET
+            // 计算出消息写入偏移
             long wroteOffset = fileFromOffset + byteBuffer.position();
-
+            // 重置hostHolder
             this.resetByteBuffer(hostHolder, 8);
+            //构造消息ID = 消息写入地址 socket信息+写入的偏移位置
             String msgId = MessageDecoder.createMessageId(this.msgIdMemory, msgInner.getStoreHostBytes(hostHolder), wroteOffset);
 
-            // Record ConsumeQueue information
+            // 从CommitLog.this.topicQueueTable获取consumequeue偏移【相当于消息在MappedFile顺序文件列表中的索引记录偏移和大小】
             keyBuilder.setLength(0);
             keyBuilder.append(msgInner.getTopic());
             keyBuilder.append('-');
@@ -1219,34 +1227,36 @@ public class CommitLog {
                     break;
             }
 
-            /**
-             * Serialize message
-             */
+
+            //序列化消息propertiesString
             final byte[] propertiesData =
                 msgInner.getPropertiesString() == null ? null : msgInner.getPropertiesString().getBytes(MessageDecoder.CHARSET_UTF8);
-
+            //获取序列化消息propertiesString字节长度
             final int propertiesLength = propertiesData == null ? 0 : propertiesData.length;
-
+            //校验序列化消息propertiesString字节长度
             if (propertiesLength > Short.MAX_VALUE) {
                 log.warn("putMessage message properties length too long. length={}", propertiesData.length);
                 return new AppendMessageResult(AppendMessageStatus.PROPERTIES_SIZE_EXCEEDED);
             }
 
+            //序列化消息Topic
             final byte[] topicData = msgInner.getTopic().getBytes(MessageDecoder.CHARSET_UTF8);
+            //获取序列化消息Topic字节长度
             final int topicLength = topicData.length;
 
+            //获取消息体Body字节长度
             final int bodyLength = msgInner.getBody() == null ? 0 : msgInner.getBody().length;
 
+            //计算消息存储总字节长度
             final int msgLen = calMsgLength(bodyLength, topicLength, propertiesLength);
-
-            // Exceeds the maximum message
+            // 校验总字节长度
             if (msgLen > this.maxMessageSize) {
                 CommitLog.log.warn("message size exceeded, msg total size: " + msgLen + ", msg body size: " + bodyLength
                     + ", maxMessageSize: " + this.maxMessageSize);
                 return new AppendMessageResult(AppendMessageStatus.MESSAGE_SIZE_EXCEEDED);
             }
 
-            // Determines whether there is sufficient free space
+            //校验总字节长度
             if ((msgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
                 this.resetByteBuffer(this.msgStoreItemMemory, maxBlank);
                 // 1 TOTALSIZE
@@ -1261,47 +1271,47 @@ public class CommitLog {
                     queueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
             }
 
-            // Initialization of storage space
+            // 重置msgStoreItemMemory
             this.resetByteBuffer(msgStoreItemMemory, msgLen);
-            // 1 TOTALSIZE
+            // 1 消息+元数据总长度
             this.msgStoreItemMemory.putInt(msgLen);
-            // 2 MAGICCODE
+            // 2 魔数，固定值 不知道干嘛
             this.msgStoreItemMemory.putInt(CommitLog.MESSAGE_MAGIC_CODE);
-            // 3 BODYCRC
+            // 3 消息crc
             this.msgStoreItemMemory.putInt(msgInner.getBodyCRC());
-            // 4 QUEUEID
+            // 4 队列id
             this.msgStoreItemMemory.putInt(msgInner.getQueueId());
-            // 5 FLAG
+            // 5 flag
             this.msgStoreItemMemory.putInt(msgInner.getFlag());
-            // 6 QUEUEOFFSET
+            // 6 队列偏移量
             this.msgStoreItemMemory.putLong(queueOffset);
-            // 7 PHYSICALOFFSET
+            // 7 物理偏移量
             this.msgStoreItemMemory.putLong(fileFromOffset + byteBuffer.position());
-            // 8 SYSFLAG
+            // 8 sysflag
             this.msgStoreItemMemory.putInt(msgInner.getSysFlag());
-            // 9 BORNTIMESTAMP
+            // 9 消息产生时间
             this.msgStoreItemMemory.putLong(msgInner.getBornTimestamp());
-            // 10 BORNHOST
+            // 10 消息产生的ip + port
             this.resetByteBuffer(hostHolder, 8);
             this.msgStoreItemMemory.put(msgInner.getBornHostBytes(hostHolder));
-            // 11 STORETIMESTAMP
+            // 11 消息存储时间
             this.msgStoreItemMemory.putLong(msgInner.getStoreTimestamp());
-            // 12 STOREHOSTADDRESS
+            // 12 消息存储的ip + port
             this.resetByteBuffer(hostHolder, 8);
             this.msgStoreItemMemory.put(msgInner.getStoreHostBytes(hostHolder));
             //this.msgBatchMemory.put(msgInner.getStoreHostBytes());
-            // 13 RECONSUMETIMES
+            // 13 重新消费的次数
             this.msgStoreItemMemory.putInt(msgInner.getReconsumeTimes());
-            // 14 Prepared Transaction Offset
+            // 14 事物相关偏移量
             this.msgStoreItemMemory.putLong(msgInner.getPreparedTransactionOffset());
-            // 15 BODY
+            // 15 消息体长度
             this.msgStoreItemMemory.putInt(bodyLength);
             if (bodyLength > 0)
                 this.msgStoreItemMemory.put(msgInner.getBody());
-            // 16 TOPIC
+            // 16 topic长度 topic
             this.msgStoreItemMemory.put((byte) topicLength);
             this.msgStoreItemMemory.put(topicData);
-            // 17 PROPERTIES
+            // 17 属性长度 属性
             this.msgStoreItemMemory.putShort((short) propertiesLength);
             if (propertiesLength > 0)
                 this.msgStoreItemMemory.put(propertiesData);

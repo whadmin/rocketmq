@@ -21,12 +21,34 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 这个类就是描述最基本消息
+ */
 public class Message implements Serializable {
     private static final long serialVersionUID = 8445773977080406428L;
 
+    /**
+     * 消息topic
+     */
     private String topic;
+    /**
+     * 只存储后透传
+     */
     private int flag;
+    /**
+     * 消息各种状态属性通过key value结构存储其中
+     *
+     * MessageConst.PROPERTY_TAGS  表示消息的标签 tags
+     * MessageConst.PROPERTY_KEYS  表示消息的键   keys
+     * PROPERTY_WAIT_STORE_MSG_OK  表示消息是否在服务器落盘后才返回应答
+     * 只有同步刷盘的时候，这个配置才work  参考CommitLog#handleDiskFlush以及handleHA函数的if嵌套条件
+     */
     private Map<String, String> properties;
+
+
+    /**
+     * 消息体
+     */
     private byte[] body;
 
     public Message() {
