@@ -58,8 +58,8 @@ public class CommitLog {
 
 
     /**
-     * 刷写磁盘服务 【没有打开getMessageStoreConfig().isTransientStorePoolEnable()使用】
-     * 会依据getMessageStoreConfig().getFlushDiskType()配置使用同步或异步2中实现
+     * 刷写磁盘服务 【getMessageStoreConfig().isTransientStorePoolEnable()=false时默认的实现】
+     * 会依据getMessageStoreConfig().getFlushDiskType()配置,使用同步或异步2中实现
      * 同步：GroupCommitService
      * 异步：FlushRealTimeService
      */
@@ -67,13 +67,13 @@ public class CommitLog {
 
 
     /**
-     * 刷写磁盘服务，【打开getMessageStoreConfig().isTransientStorePoolEnable()使用】
+     * 刷写磁盘服务，【getMessageStoreConfig().isTransientStorePoolEnable()=true使用TransientStorePool的实现】
      * 这里只能使用异步刷写如磁盘 FlushRealTimeService
      */
     private final FlushCommitLogService commitLogService;
 
     /**
-     * 追加消息实现
+     * 追加进入字节数组实现实现【名字很奇怪】
      */
     private final AppendMessageCallback appendMessageCallback;
 
@@ -82,7 +82,7 @@ public class CommitLog {
 
 
     /**
-     *
+     * 记录每一个ConsumeQueue 逻辑编译
      */
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
 
@@ -121,6 +121,9 @@ public class CommitLog {
     }
 
     /**
+     * 加载
+     *
+     * 对于已经写满的的文件设置更新对应ByteBuffer坐标位置同步到完结。
      * @return
      */
     public boolean load() {
@@ -130,7 +133,8 @@ public class CommitLog {
     }
 
     /**
-     *
+     * 启动
+     * 启动磁盘刷新服务
      */
     public void start() {
         this.flushCommitLogService.start();
@@ -141,7 +145,8 @@ public class CommitLog {
     }
 
     /**
-     *
+     * 关闭
+     * 关闭磁盘刷新服务
      */
     public void shutdown() {
         if (defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
@@ -151,20 +156,39 @@ public class CommitLog {
         this.flushCommitLogService.shutdown();
     }
 
+    /**
+     * 清理
+     * @return
+     */
     public long flush() {
+        //针对使用transientStorePool，将writeBuffer数据写入文件
         this.mappedFileQueue.commit(0);
+        //将默认mappedByteBufferr数据写入文件
         this.mappedFileQueue.flush(0);
+        //获取刷盘的偏移
         return this.mappedFileQueue.getFlushedWhere();
     }
 
+    /**
+     * 获取最后一个MappedFile写入位置
+     * @return
+     */
     public long getMaxOffset() {
         return this.mappedFileQueue.getMaxOffset();
     }
 
+    /**
+     * 获取最后一个MappedFile wrote位置，到queue中记录的commit的位置之差
+     * @return
+     */
     public long remainHowManyDataToCommit() {
         return this.mappedFileQueue.remainHowManyDataToCommit();
     }
 
+    /**
+     *  获取最后一个MappedFile commit位置，到queue中记录的flush的位置之差
+     * @return
+     */
     public long remainHowManyDataToFlush() {
         return this.mappedFileQueue.remainHowManyDataToFlush();
     }

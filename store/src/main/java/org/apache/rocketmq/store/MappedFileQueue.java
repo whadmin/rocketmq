@@ -204,15 +204,19 @@ public class MappedFileQueue {
     }
 
     /**
-     * 恢复，重启时加载数据
-     * 读取storePath下面所有文件，对于大小是mappedFileSize记录在队列中
-     * 设置commit,wrote,flushPosition为mappedFileSize(类似于重启之后，标记这些位置都处理过)
+     * 对于已经写满的的文件设置更新对应ByteBuffer坐标位置同步到完结。
+     *
+     * 你可能会疑问为什么文件都写满了对应ByteBuffer没有同步更新呢？
+     * 这是因为写入时我们没有使用文件对应的ByteBuffer，而是使用ByteBuffer.slice()生成分片字节缓存区ByteBuffer，将消息加入到生成分片字节缓存区ByteBuffer
+     * 分片缓冲区和其生成的缓存区共享数据，但坐标相对独立。因而即使分片缓存区中写入数据,其文件对应的缓冲区还坐标依旧保持不变。这里我们将依旧写满的文件对应字节缓冲区同步下。
+     * 参考 MappedFile.appendMessagesInner,
+     *
      */
     public boolean load() {
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
         if (files != null) {
-            // ascending order
+            // 文件排序，这样每一个文件都能遍历到
             Arrays.sort(files);
             for (File file : files) {
 
@@ -418,7 +422,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * commit的位置
+     * 获取最后一个MappedFile写入位置
      * @return
      */
     public long getMaxOffset() {
@@ -430,7 +434,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * wrote到的位置
+     * 获取最后一个MappedFile写入位置，这里不考虑使用transientStorePool
      * @return
      */
     public long getMaxWrotePosition() {
@@ -442,7 +446,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * wrote到的位置，到queue中记录的commit的位置之差
+     * 获取最后一个MappedFile wrote位置，到queue中记录的commit的位置之差
      * @return
      */
     public long remainHowManyDataToCommit() {
@@ -450,7 +454,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * commit到的位置，到queue中记录的flush的位置之差
+     * 获取最后一个MappedFile commit位置，到queue中记录的flush的位置之差
      * @return
      */
     public long remainHowManyDataToFlush() {
