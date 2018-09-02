@@ -20,12 +20,24 @@ import java.nio.ByteBuffer;
 
 public class SelectMappedBufferResult {
 
+    /**
+     * 开始位置，是绝对偏移，20位long型
+     */
     private final long startOffset;
 
+    /**
+     * 对应的byteBuffer
+     */
     private final ByteBuffer byteBuffer;
 
+    /**
+     * 对应的byteBuffer的大小
+     */
     private int size;
 
+    /**
+     * 选取数据来源于哪个mappedFile
+     */
     private MappedFile mappedFile;
 
     public SelectMappedBufferResult(long startOffset, ByteBuffer byteBuffer, int size, MappedFile mappedFile) {

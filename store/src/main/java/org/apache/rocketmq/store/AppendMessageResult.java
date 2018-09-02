@@ -30,10 +30,14 @@ public class AppendMessageResult {
     private String msgId;
     // 写入消息
     private long storeTimestamp;
-    // Consume queue's offset(step by one)
+    // 逻辑地址，代表是这个队列中的第几个位置
     private long logicsOffset;
+    //这个不知道有什么用,get,set方法也没调用
     private long pagecacheRT = 0;
-
+    /**
+     * 写入的消息数量，默认是1
+     * 只有在处理批量消息MessageExtBatch时，会设置为其他值
+     */
     private int msgNum = 1;
 
     public AppendMessageResult(AppendMessageStatus status) {

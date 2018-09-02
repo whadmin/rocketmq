@@ -1036,9 +1036,23 @@ public class CommitLog {
         }
     }
 
+
+    /**
+     * 同步刷写服务类请求
+     */
     public static class GroupCommitRequest {
+        /**
+         * 本次追加消息后,下次追加偏移
+         */
         private final long nextOffset;
+        /**
+         * 线程同步工具,用来同步阻塞线程是否刷写成功【如果消息配置了messageExt.isWaitStoreMsgOK()=true,
+         * 追加消息的线程会调用waitForFlush同步阻塞等待，在超时时间内收到wakeupCustomer确认消息同步刷写成功才能返回】
+         */
         private final CountDownLatch countDownLatch = new CountDownLatch(1);
+        /**
+         * 同步刷写成功标识
+         */
         private volatile boolean flushOK = false;
 
         public GroupCommitRequest(long nextOffset) {
@@ -1049,11 +1063,21 @@ public class CommitLog {
             return nextOffset;
         }
 
+
+        /**
+         * GroupCommitService 同步刷写服务类调用此方法通知同步刷写完毕,释放同步锁
+         * @param flushOK
+         */
         public void wakeupCustomer(final boolean flushOK) {
             this.flushOK = flushOK;
             this.countDownLatch.countDown();
         }
 
+        /**
+         * 通过同步锁,等待同步刷写成功的同步
+         * @param timeout
+         * @return
+         */
         public boolean waitForFlush(long timeout) {
             try {
                 this.countDownLatch.await(timeout, TimeUnit.MILLISECONDS);
@@ -1066,42 +1090,89 @@ public class CommitLog {
     }
 
     /**
-     * GroupCommit Service
+     * 同步刷写服务类，一个线程一直的处理同步刷写任务，每处理一个循环后等待10毫秒，一旦新任务到达，立即唤醒执行任务
      */
     class GroupCommitService extends FlushCommitLogService {
+        // 保存同步刷写服务类请求集合
         private volatile List<GroupCommitRequest> requestsWrite = new ArrayList<GroupCommitRequest>();
+        // 在同步刷写服务类中止关闭时，用来保存最后需要处理同步刷写服务类请求，数据会从requestsWrite拷贝过来？为什么这么做
         private volatile List<GroupCommitRequest> requestsRead = new ArrayList<GroupCommitRequest>();
 
+        /**
+         * 添加同步刷写服务类请求
+         * @param request
+         */
         public synchronized void putRequest(final GroupCommitRequest request) {
             synchronized (this.requestsWrite) {
                 this.requestsWrite.add(request);
             }
+            //设置父类hasNotified为true表示收到新的任务，释放线程中同步等待锁
             if (hasNotified.compareAndSet(false, true)) {
                 waitPoint.countDown(); // notify
             }
         }
 
+        /**
+         * 置换requestsRead,requestsWrite
+         */
         private void swapRequests() {
             List<GroupCommitRequest> tmp = this.requestsWrite;
             this.requestsWrite = this.requestsRead;
             this.requestsRead = tmp;
         }
 
+        /**
+         * 执行启动同步刷写服务类
+         */
+        public void run() {
+            CommitLog.log.info(this.getServiceName() + " service started");
+
+            //进入work工作线程，只要工作线程状态stopped！=true 无限循环
+            while (!this.isStopped()) {
+                try {
+                    //每执行一次，没有新的通知，同步等待10秒
+                    this.waitForRunning(10);
+                    this.doCommit();
+                } catch (Exception e) {
+                    CommitLog.log.warn(this.getServiceName() + " service has exception. ", e);
+                }
+            }
+
+            // 关闭服务休眠10毫秒
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                CommitLog.log.warn("GroupCommitService Exception, ", e);
+            }
+
+            //置换requestsRead,requestsWrite
+            synchronized (this) {
+                this.swapRequests();
+            }
+
+            //执行刷盘
+            this.doCommit();
+
+            CommitLog.log.info(this.getServiceName() + " service end");
+        }
+
         private void doCommit() {
             synchronized (this.requestsRead) {
+                //优先刷盘requestsRead
                 if (!this.requestsRead.isEmpty()) {
                     for (GroupCommitRequest req : this.requestsRead) {
-                        // There may be a message in the next file, so a maximum of
-                        // two times the flush
+                        // 下一个文件中可能有一条消息，因此最多为刷新次数的两倍  ？为什么这么做
                         boolean flushOK = false;
                         for (int i = 0; i < 2 && !flushOK; i++) {
+                            //判断是否需要刷盘
                             flushOK = CommitLog.this.mappedFileQueue.getFlushedWhere() >= req.getNextOffset();
 
                             if (!flushOK) {
+                                //从mappedFileQueue获取最后一个mappedFile将mappedFile内存映射中的数据写入磁盘
                                 CommitLog.this.mappedFileQueue.flush(0);
                             }
                         }
-
+                        //通知req线程同步释放锁。用来实现消息写入磁盘同步返回
                         req.wakeupCustomer(flushOK);
                     }
 
@@ -1112,41 +1183,13 @@ public class CommitLog {
 
                     this.requestsRead.clear();
                 } else {
-                    // Because of individual messages is set to not sync flush, it
-                    // will come to this process
+                    //通知req线程同步释放锁。用来实现消息写入磁盘同步返回
                     CommitLog.this.mappedFileQueue.flush(0);
                 }
             }
         }
 
-        public void run() {
-            CommitLog.log.info(this.getServiceName() + " service started");
 
-            while (!this.isStopped()) {
-                try {
-                    this.waitForRunning(10);
-                    this.doCommit();
-                } catch (Exception e) {
-                    CommitLog.log.warn(this.getServiceName() + " service has exception. ", e);
-                }
-            }
-
-            // Under normal circumstances shutdown, wait for the arrival of the
-            // request, and then flush
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                CommitLog.log.warn("GroupCommitService Exception, ", e);
-            }
-
-            synchronized (this) {
-                this.swapRequests();
-            }
-
-            this.doCommit();
-
-            CommitLog.log.info(this.getServiceName() + " service end");
-        }
 
         @Override
         protected void onWaitEnd() {

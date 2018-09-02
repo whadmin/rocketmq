@@ -23,8 +23,13 @@ public class MessageExtBatch extends MessageExt {
 
     private static final long serialVersionUID = -2353110995348498537L;
 
+    /**
+     * 获取消息body字节数组包装到缓冲区中
+     * @return
+     */
     public ByteBuffer wrap() {
         assert getBody() != null;
+        //将一个字节数组包装到缓冲区中。
         return ByteBuffer.wrap(getBody(), 0, getBody().length);
     }
 
