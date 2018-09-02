@@ -275,6 +275,19 @@ public class MappedFileQueue {
 
     /**
      * 返回mappedFiles中最后一个mappedFile，
+     * 如果mappedFiles为空,根据startOffset创建出来最新的mappedFile
+     * 如果mappedFiles最后一个写满了，则创建出来最新的mappedFile
+     * @param startOffset
+     * @return
+     */
+    public MappedFile getLastMappedFile(final long startOffset) {
+        return getLastMappedFile(startOffset, true);
+    }
+
+
+
+    /**
+     * 返回mappedFiles中最后一个mappedFile，
      * 如果mappedFiles为空,根据startOffset以及needCreate判断是否需要创建出来最新的mappedFile
      * 如果mappedFiles最后一个写满了，根据needCreate判断是否需要创建出来最新的mappedFile
      * @param startOffset
@@ -316,6 +329,7 @@ public class MappedFileQueue {
                 }
             }
 
+            //添加到mappedFiles 集合中
             if (mappedFile != null) {
                 if (this.mappedFiles.isEmpty()) {
                     mappedFile.setFirstCreateInQueue(true);
@@ -351,16 +365,6 @@ public class MappedFileQueue {
         return mappedFileLast;
     }
 
-    /**
-     * 返回mappedFiles中最后一个mappedFile，
-     * 如果mappedFiles为空,根据startOffset创建出来最新的mappedFile
-     * 如果mappedFiles最后一个写满了，则创建出来最新的mappedFile
-     * @param startOffset
-     * @return
-     */
-    public MappedFile getLastMappedFile(final long startOffset) {
-        return getLastMappedFile(startOffset, true);
-    }
 
 
 

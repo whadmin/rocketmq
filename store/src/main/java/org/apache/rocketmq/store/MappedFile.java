@@ -41,6 +41,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import sun.nio.ch.DirectBuffer;
 
+/**
+ * MappedFile 用来表示存储消息字节的文件
+ *
+ * 有2中类型MappedFile，
+ *
+ * 使用TransientStorePool transientStorePool，写入文件我们通过writeBuffer 使用committedPosition表示写入偏移位置
+ *
+ * 不用时TransientStorePool transientStorePool，写入文件我们通过mappedByteBuffer 使用wrotePosition表示写入偏移位置
+ *
+ *
+ * 追加消息方式有2种
+ * 1  使用
+ */
 public class MappedFile extends ReferenceResource {
 
     public static final int OS_PAGE_SIZE = 1024 * 4;
@@ -57,12 +70,12 @@ public class MappedFile extends ReferenceResource {
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
 
     /**
-     * MappedFile内存映射缓冲区中Pos位置
+     * MappedFile使用内存映非射transientStorePool缓冲区中Pos位置
      */
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
 
     /**
-     *
+     *MappedFile使用transientStorePool非内存映射缓冲区中Pos位置
      */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
 

@@ -48,24 +48,57 @@ public class CommitLog {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     // End of file empty MAGIC CODE cbd43194
     private final static int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
-    private final MappedFileQueue mappedFileQueue;
+
     private final DefaultMessageStore defaultMessageStore;
+
+    /**
+     * mappedFile队列
+     */
+    private final MappedFileQueue mappedFileQueue;
+
+
+    /**
+     * 刷写磁盘服务 【没有打开getMessageStoreConfig().isTransientStorePoolEnable()使用】
+     * 会依据getMessageStoreConfig().getFlushDiskType()配置使用同步或异步2中实现
+     * 同步：GroupCommitService
+     * 异步：FlushRealTimeService
+     */
     private final FlushCommitLogService flushCommitLogService;
 
-    //If TransientStorePool enabled, we must flush message to FileChannel at fixed periods
+
+    /**
+     * 刷写磁盘服务，【打开getMessageStoreConfig().isTransientStorePoolEnable()使用】
+     * 这里只能使用异步刷写如磁盘 FlushRealTimeService
+     */
     private final FlushCommitLogService commitLogService;
 
+    /**
+     * 追加消息实现
+     */
     private final AppendMessageCallback appendMessageCallback;
+
+
     private final ThreadLocal<MessageExtBatchEncoder> batchEncoderThreadLocal;
+
+
+    /**
+     *
+     */
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
+
+
     private volatile long confirmOffset = -1L;
 
     private volatile long beginTimeInLock = 0;
+
+
     private final PutMessageLock putMessageLock;
 
     public CommitLog(final DefaultMessageStore defaultMessageStore) {
+
         this.mappedFileQueue = new MappedFileQueue(defaultMessageStore.getMessageStoreConfig().getStorePathCommitLog(),
             defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog(), defaultMessageStore.getAllocateMappedFileService());
+
         this.defaultMessageStore = defaultMessageStore;
 
         if (FlushDiskType.SYNC_FLUSH == defaultMessageStore.getMessageStoreConfig().getFlushDiskType()) {
@@ -87,12 +120,18 @@ public class CommitLog {
 
     }
 
+    /**
+     * @return
+     */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
         log.info("load commit log " + (result ? "OK" : "Failed"));
         return result;
     }
 
+    /**
+     *
+     */
     public void start() {
         this.flushCommitLogService.start();
 
@@ -101,6 +140,9 @@ public class CommitLog {
         }
     }
 
+    /**
+     *
+     */
     public void shutdown() {
         if (defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
             this.commitLogService.shutdown();
