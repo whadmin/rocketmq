@@ -122,8 +122,7 @@ public class CommitLog {
 
     /**
      * 加载
-     *
-     * 对于已经写满的的文件设置更新对应ByteBuffer坐标位置同步到完结。
+     * 对于已经写满的的文件同步更新对应ByteBuffer坐标位置到完结。
      * @return
      */
     public boolean load() {
@@ -152,16 +151,15 @@ public class CommitLog {
         if (defaultMessageStore.getMessageStoreConfig().isTransientStorePoolEnable()) {
             this.commitLogService.shutdown();
         }
-
         this.flushCommitLogService.shutdown();
     }
 
     /**
-     * 清理
+     * 刷盘
      * @return
      */
     public long flush() {
-        //针对使用transientStorePool，将writeBuffer数据写入文件
+        //将writeBuffer数据写入fileChannel（getMessageStoreConfig().isTransientStorePoolEnable()开启才有用）
         this.mappedFileQueue.commit(0);
         //将默认mappedByteBufferr数据写入文件
         this.mappedFileQueue.flush(0);

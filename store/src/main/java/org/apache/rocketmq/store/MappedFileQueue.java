@@ -62,11 +62,11 @@ public class MappedFileQueue {
     private final AllocateMappedFileService allocateMappedFileService;
 
     /**
-     * 刷盘flush的偏移地址
+     * 刷盘flush的坐标地址
      */
     private long flushedWhere = 0;
     /**
-     * 提交commit的偏移地址
+     * 提交commit的坐标地址
      */
     private long committedWhere = 0;
 
@@ -148,10 +148,10 @@ public class MappedFileQueue {
     }
 
     /**
-     * 处理偏移大于offset的MappedFile脏文件,
+     * 处理坐标大于offset的MappedFile脏文件,
      *
      * 如果  file.getFileFromOffset() + this.mappedFileSize > offset > file.getFileFromOffset()
-     * 重置设置此MappedFile 所有偏移
+     * 重置设置此MappedFile 所有坐标
      *
      * 如果 offset < file.getFileFromOffset()
      * 销毁此MappedFile
@@ -303,12 +303,12 @@ public class MappedFileQueue {
         //返回mappedFiles中最后一个mappedFile
         MappedFile mappedFileLast = getLastMappedFile();
 
-        //如果最后一个mappedFiles为空，计算创建mappedFile的偏移
+        //如果最后一个mappedFiles为空，计算创建mappedFile的坐标
         if (mappedFileLast == null) {
             createOffset = startOffset - (startOffset % this.mappedFileSize);
         }
 
-        //如果最后一个mappedFiles不为空，且mappedFiles已经满了，计算新创建mappedFile的偏移
+        //如果最后一个mappedFiles不为空，且mappedFiles已经满了，计算新创建mappedFile的坐标
         if (mappedFileLast != null && mappedFileLast.isFull()) {
             createOffset = mappedFileLast.getFileFromOffset() + this.mappedFileSize;
         }
@@ -573,15 +573,25 @@ public class MappedFileQueue {
         return deleteCount;
     }
 
+    /**
+     * 通过flushedWhere获取MappedFileQueue中最后一个MappedFile
+     * 调用flush将mappedByteBuffer或fileChannel中数据写入磁盘
+     * 并记录committedWhere,storeTimestamp
+     * @param flushLeastPages
+     * @return
+     */
     public boolean flush(final int flushLeastPages) {
         boolean result = true;
-        //通过offset在MappedFileQueue找到所属mappedFile
+        // 通过flushedWhere获取MappedFileQueue中最后一个MappedFile
         MappedFile mappedFile = this.findMappedFileByOffset(this.flushedWhere, this.flushedWhere == 0);
         if (mappedFile != null) {
             long tmpTimeStamp = mappedFile.getStoreTimestamp();
+            //调用flush将mappedByteBuffer或fileChannel中数据写入磁盘
             int offset = mappedFile.flush(flushLeastPages);
             long where = mappedFile.getFileFromOffset() + offset;
+            //如果flush成功了result会为false ?为什么？
             result = where == this.flushedWhere;
+            //记录committedWhere,storeTimestamp
             this.flushedWhere = where;
             if (0 == flushLeastPages) {
                 //设置消息更新时间
@@ -592,13 +602,24 @@ public class MappedFileQueue {
         return result;
     }
 
+    /**
+     * 通过committedWhere获取MappedFileQueue中最后一个MappedFile
+     * 调用commit将MappedFile.ByteBuffer字节缓冲区中的数据写入MappedFile.fileChannel
+     * 并记录committedWhere
+     * @param commitLeastPages
+     * @return
+     */
     public boolean commit(final int commitLeastPages) {
         boolean result = true;
+        //通过committedWhere获取MappedFileQueue中最后一个MappedFile
         MappedFile mappedFile = this.findMappedFileByOffset(this.committedWhere, this.committedWhere == 0);
         if (mappedFile != null) {
+            //调用commit将MappedFile.ByteBuffer字节缓冲区中的数据写入MappedFile.fileChannel
             int offset = mappedFile.commit(commitLeastPages);
             long where = mappedFile.getFileFromOffset() + offset;
+            //如果commit成功了result会为false ?为什么？
             result = where == this.committedWhere;
+            //记录committedWhere
             this.committedWhere = where;
         }
 
