@@ -172,12 +172,12 @@ public class MappedFileQueue {
                 }
             }
         }
-
+        //从mappedFiles 清理掉 files
         this.deleteExpiredFile(willRemoveFiles);
     }
 
     /**
-     * 销毁列表中MappedFile
+     * 从mappedFiles 清理掉 files
      * @param files
      */
     void deleteExpiredFile(List<MappedFile> files) {
@@ -374,6 +374,8 @@ public class MappedFileQueue {
 
     /**
      * 将offset以后的MappedFile都清除掉，但是代码似乎有bug，在吐槽中说
+     * ListIterator<MappedFile> iterator = this.mappedFiles.listIterator();//得到一个iter
+     * 参考实现，在执行while (iterator.hasPrevious()) 一定会返回false的不会为true
      * @param offset
      * @return
      */
@@ -463,12 +465,14 @@ public class MappedFileQueue {
 
 
     /**
-     * 清理最后一个mappedFile
+     * 从mappedFiles清理最后一个mappedFile，并销毁此mappedFile
      */
     public void deleteLastMappedFile() {
         MappedFile lastMappedFile = getLastMappedFile();
         if (lastMappedFile != null) {
+            //销毁此mappedFile
             lastMappedFile.destroy(1000);
+            //从mappedFiles清理最后一个mappedFile
             this.mappedFiles.remove(lastMappedFile);
             log.info("on recover, destroy a logic mapped file " + lastMappedFile.getFileName());
 
@@ -698,6 +702,11 @@ public class MappedFileQueue {
         return size;
     }
 
+    /**
+     * 销毁第一个mappedFile
+     * @param intervalForcibly
+     * @return
+     */
     public boolean retryDeleteFirstFile(final long intervalForcibly) {
         MappedFile mappedFile = this.getFirstMappedFile();
         if (mappedFile != null) {

@@ -518,6 +518,11 @@ public class MappedFile extends ReferenceResource {
         return null;
     }
 
+    /**
+     * 返回从pos到最大有效位置的所有数据
+     * @param pos
+     * @return
+     */
     public SelectMappedBufferResult selectMappedBuffer(int pos) {
         int readPosition = getReadPosition();
         if (pos < readPosition && pos >= 0) {

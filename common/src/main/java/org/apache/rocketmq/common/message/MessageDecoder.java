@@ -411,15 +411,24 @@ public class MessageDecoder {
         return map;
     }
 
+    /**
+     * 将消息编码为字节数组
+     * @param message
+     * @return
+     */
     public static byte[] encodeMessage(Message message) {
-        //only need flag, body, properties
+        //获取消息body字节数组
         byte[] body = message.getBody();
+        //获取消息body长度
         int bodyLen = body.length;
+        //获取消息属性额字节数组
         String properties = messageProperties2String(message.getProperties());
         byte[] propertiesBytes = properties.getBytes(CHARSET_UTF8);
-        //note properties length must not more than Short.MAX
+        //获取消息属性长度
         short propertiesLength = (short) propertiesBytes.length;
+        //获取消息同步方式
         int sysFlag = message.getFlag();
+        //计算消息+元数据总长度
         int storeSize = 4 // 1 TOTALSIZE
             + 4 // 2 MAGICCOD
             + 4 // 3 BODYCRC
@@ -427,6 +436,9 @@ public class MessageDecoder {
             + 4 + bodyLen // 4 BODY
             + 2 + propertiesLength;
         ByteBuffer byteBuffer = ByteBuffer.allocate(storeSize);
+
+        //写入字节缓存区中
+
         // 1 TOTALSIZE
         byteBuffer.putInt(storeSize);
 
@@ -451,29 +463,35 @@ public class MessageDecoder {
         return byteBuffer.array();
     }
 
+    /**
+     * 将字节缓冲区中额数据读取出来转化为一条消息
+     * @param byteBuffer
+     * @return
+     * @throws Exception
+     */
     public static Message decodeMessage(ByteBuffer byteBuffer) throws Exception {
         Message message = new Message();
 
-        // 1 TOTALSIZE
+        // 1 获取消息消息+元数据总长度
         byteBuffer.getInt();
 
-        // 2 MAGICCODE
+        // 2 获取消息MAGICCODE
         byteBuffer.getInt();
 
-        // 3 BODYCRC
+        // 3 获取消息BODYcrc
         byteBuffer.getInt();
 
-        // 4 FLAG
+        // 4 获取消息flag
         int flag = byteBuffer.getInt();
         message.setFlag(flag);
 
-        // 5 BODY
+        // 5  获取消息BODY
         int bodyLen = byteBuffer.getInt();
         byte[] body = new byte[bodyLen];
         byteBuffer.get(body);
         message.setBody(body);
 
-        // 6 properties
+        // 6 获取消息 properties
         short propertiesLen = byteBuffer.getShort();
         byte[] propertiesBytes = new byte[propertiesLen];
         byteBuffer.get(propertiesBytes);
@@ -482,6 +500,11 @@ public class MessageDecoder {
         return message;
     }
 
+    /**
+     * 针对批量消息做编码转化为字节数组
+     * @param messages
+     * @return
+     */
     public static byte[] encodeMessages(List<Message> messages) {
         //TO DO refactor, accumulate in one buffer, avoid copies
         List<byte[]> encodedMessages = new ArrayList<byte[]>(messages.size());
@@ -500,6 +523,12 @@ public class MessageDecoder {
         return allBytes;
     }
 
+    /**
+     * 将字节缓冲区中数组转化为多条消息
+     * @param byteBuffer
+     * @return
+     * @throws Exception
+     */
     public static List<Message> decodeMessages(ByteBuffer byteBuffer) throws Exception {
         //TO DO add a callback for processing,  avoid creating lists
         List<Message> msgs = new ArrayList<Message>();

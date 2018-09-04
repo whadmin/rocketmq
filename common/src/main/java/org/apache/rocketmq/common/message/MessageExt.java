@@ -76,7 +76,7 @@ public class MessageExt extends Message {
     }
 
     /**
-     * 用于将socket地址写入byteBuffer
+     * 获取将socket地址写入byteBuffer
      * @param socketAddress
      * @param byteBuffer
      * @return

@@ -48,6 +48,9 @@ public class Message implements Serializable {
 
     /**
      * 消息体
+     * 当消息为MessageExtBatch 我们会把每个消息encodeMessage(message)字节数组累加并返回
+     * List<Message> messages = new ArrayList<>();
+     * MessageDecoder.encodeMessages(messages)
      */
     private byte[] body;
 

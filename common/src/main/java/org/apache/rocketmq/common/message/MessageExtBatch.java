@@ -24,7 +24,10 @@ public class MessageExtBatch extends MessageExt {
     private static final long serialVersionUID = -2353110995348498537L;
 
     /**
-     * 获取消息body字节数组包装到缓冲区中
+     * 获取消息body字节数组写入到缓冲区中
+     * 当消息为MessageExtBatch 我们会把每个消息encodeMessage(message)字节数组累加并返回
+     * List<Message> messages = new ArrayList<>();
+     * messageExtBatch.setBody(MessageDecoder.encodeMessages(messages));
      * @return
      */
     public ByteBuffer wrap() {
