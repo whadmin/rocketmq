@@ -43,10 +43,10 @@ import org.slf4j.LoggerFactory;
  * Store all metadata downtime for recovery, data protection reliability
  */
 public class CommitLog {
-    // Message's MAGIC CODE daa320a7
+    // 消息的MAGIC CODE daa320a7
     public final static int MESSAGE_MAGIC_CODE = 0xAABBCCDD ^ 1880681586 + 8;
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-    // End of file empty MAGIC CODE cbd43194
+    // 文件结束空MAGIC CODE cbd43194
     private final static int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
 
     private final DefaultMessageStore defaultMessageStore;
@@ -1149,7 +1149,7 @@ public class CommitLog {
         private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;
         // 存储消息Id的Buffer
         private final ByteBuffer msgIdMemory;
-        // 存储消息内容的Buffer
+        // 存储消息内容的Buffer（先写入msgStoreItemMemory，在将msgStoreItemMemory写入byteBuffer）
         private final ByteBuffer msgStoreItemMemory;
         // 存储消息写入brokersocker地址的Buffer
         private final ByteBuffer hostHolder = ByteBuffer.allocate(8);
@@ -1244,15 +1244,15 @@ public class CommitLog {
                 return new AppendMessageResult(AppendMessageStatus.MESSAGE_SIZE_EXCEEDED);
             }
 
-            //校验总字节长度
+            //校验总字节长度，如果当前MappedFile文件没办法存储当前消息的写入
             if ((msgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
+                //设置文件的消息的字节缓冲区的limit为maxBlank
                 this.resetByteBuffer(this.msgStoreItemMemory, maxBlank);
-                // 1 TOTALSIZE
+                // 1 追加maxBlank长度
                 this.msgStoreItemMemory.putInt(maxBlank);
-                // 2 MAGICCODE
+                // 2 追加文件结束空MAGIC CODE
                 this.msgStoreItemMemory.putInt(CommitLog.BLANK_MAGIC_CODE);
-                // 3 The remaining space may be any value
-                // Here the length of the specially set maxBlank
+                // 3 msgStoreItemMemory 添加到文件对应 byteBuffer，返回文件无法满足此消息写入，外部会创建一个新的MappedFile
                 final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
                 byteBuffer.put(this.msgStoreItemMemory.array(), 0, maxBlank);
                 return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset, maxBlank, msgId, msgInner.getStoreTimestamp(),
@@ -1367,7 +1367,7 @@ public class CommitLog {
 
             //获取MessageExtBatchEncoder.encode(messageExtBatch)的字节缓冲区对象
             ByteBuffer messagesByteBuff = messageExtBatch.getEncodedBuff();
-
+            //标记消息坐标位置
             messagesByteBuff.mark();
 
             //获取将socket地址写入byteBuffer
@@ -1381,53 +1381,71 @@ public class CommitLog {
                 final int msgPos = messagesByteBuff.position();
                 final int msgLen = messagesByteBuff.getInt();
                 final int bodyLen = msgLen - 40; //only for log, just estimate it
-                // Exceeds the maximum message
+                // 校验批量消息中一条交易消息的长度
                 if (msgLen > this.maxMessageSize) {
                     CommitLog.log.warn("message size exceeded, msg total size: " + msgLen + ", msg body size: " + bodyLen
                         + ", maxMessageSize: " + this.maxMessageSize);
                     return new AppendMessageResult(AppendMessageStatus.MESSAGE_SIZE_EXCEEDED);
                 }
                 totalMsgLen += msgLen;
-                // Determines whether there is sufficient free space
+                //校验批量消息总长度
                 if ((totalMsgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
                     this.resetByteBuffer(this.msgStoreItemMemory, 8);
-                    // 1 TOTALSIZE
+                    // 1 追加maxBlank长度
                     this.msgStoreItemMemory.putInt(maxBlank);
-                    // 2 MAGICCODE
+                    // 2 追加文件结束空MAGIC CODE
                     this.msgStoreItemMemory.putInt(CommitLog.BLANK_MAGIC_CODE);
-                    // 3 The remaining space may be any value
-                    //ignore previous read
+                    // 3 重置messagesByteBuff
                     messagesByteBuff.reset();
-                    // Here the length of the specially set maxBlank
-                    byteBuffer.reset(); //ignore the previous appended messages
+                    // 4 重置byteBuffer
+                    byteBuffer.reset();
+                    // 5 msgStoreItemMemory 添加到文件对应 byteBuffer，返回文件无法满足此消息写入，外部会创建一个新的MappedFile
                     byteBuffer.put(this.msgStoreItemMemory.array(), 0, 8);
                     return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset, maxBlank, msgIdBuilder.toString(), messageExtBatch.getStoreTimestamp(),
                         beginQueueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
                 }
-                //move to add queue offset and commitlog offset
+                //移动以添加队列偏移量和commitlog偏移量
                 messagesByteBuff.position(msgPos + 20);
+
+                /**
+                 * 覆盖messagesByteBuff中队列偏移量 MessageExtBatchEncoder.encode方法中设置为0
+                 * 6 QUEUEOFFSET
+                 * this.msgBatchMemory.putLong(0);
+                 */
                 messagesByteBuff.putLong(queueOffset);
+                /**
+                 * 覆盖messagesByteBuff中物理偏移量 MessageExtBatchEncoder.encode方法中设置为0
+                 * 6 QUEUEOFFSET
+                 * this.msgBatchMemory.putLong(0);
+                 */
                 messagesByteBuff.putLong(wroteOffset + totalMsgLen - msgLen);
 
+                //设置position = 0
                 storeHostBytes.rewind();
+                //创创建消息ID写入msgIdBuilder
                 String msgId = MessageDecoder.createMessageId(this.msgIdMemory, storeHostBytes, wroteOffset + totalMsgLen - msgLen);
                 if (msgIdBuilder.length() > 0) {
                     msgIdBuilder.append(',').append(msgId);
                 } else {
                     msgIdBuilder.append(msgId);
                 }
+                //队列偏移+1
                 queueOffset++;
+                //队列偏移+1
                 msgNum++;
                 messagesByteBuff.position(msgPos + msgLen);
             }
 
             messagesByteBuff.position(0);
             messagesByteBuff.limit(totalMsgLen);
+            //追加消息到MappeFile对字节缓冲区中
             byteBuffer.put(messagesByteBuff);
+            //设置为null表示已经处理
             messageExtBatch.setEncodedBuff(null);
             AppendMessageResult result = new AppendMessageResult(AppendMessageStatus.PUT_OK, wroteOffset, totalMsgLen, msgIdBuilder.toString(),
                 messageExtBatch.getStoreTimestamp(), beginQueueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
             result.setMsgNum(msgNum);
+            //设置队列偏移
             CommitLog.this.topicQueueTable.put(key, queueOffset);
 
             return result;
@@ -1529,9 +1547,9 @@ public class CommitLog {
                 this.msgBatchMemory.putInt(messageExtBatch.getQueueId());
                 // 5 FLAG
                 this.msgBatchMemory.putInt(flag);
-                // 6 QUEUEOFFSET
+                // 6 QUEUEOFFSET  这里暂时设置为0  DefaultAppendMessageCallback.doAppend覆盖
                 this.msgBatchMemory.putLong(0);
-                // 7 PHYSICALOFFSET
+                // 7 PHYSICALOFFSET  这里暂时设置为0 DefaultAppendMessageCallback.doAppend覆盖
                 this.msgBatchMemory.putLong(0);
                 // 8 SYSFLAG
                 this.msgBatchMemory.putInt(messageExtBatch.getSysFlag());
