@@ -440,6 +440,14 @@ public class ConsumeQueue {
         this.defaultMessageStore.getRunningFlags().makeLogicsQueueError();
     }
 
+    /**
+     * 添加位置信息封装
+     * @param offset
+     * @param size
+     * @param tagsCode
+     * @param cqOffset
+     * @return
+     */
     private boolean putMessagePositionInfo(final long offset, final int size, final long tagsCode,
         final long cqOffset) {
 

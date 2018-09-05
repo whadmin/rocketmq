@@ -208,7 +208,7 @@ public class CommitLog {
      */
     public SelectMappedBufferResult getData(final long offset, final boolean returnFirstOnNotFound) {
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
-        // 通过offset在MappedFileQueue找到所属mappedFile
+        // 通过offseth获取CommitLog下所属的mappedFile
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, returnFirstOnNotFound);
         if (mappedFile != null) {
             int pos = (int) (offset % mappedFileSize);
@@ -764,6 +764,11 @@ public class CommitLog {
         return null;
     }
 
+    /**
+     * 获取offset 坐标对应mappedFile的下一个mappedFile其实物理坐标
+     * @param offset
+     * @return
+     */
     public long rollNextFile(final long offset) {
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
         return offset + mappedFileSize - offset % mappedFileSize;
@@ -1622,10 +1627,10 @@ public class CommitLog {
             //获取消息MAGICCODE
             int magicCode = byteBuffer.getInt();
             switch (magicCode) {
-                //是否是MessageExtBrokerInner 插入的消息
+                //消息标识
                 case MESSAGE_MAGIC_CODE:
                     break;
-                //是否是MessageExtBatch 插入的消息
+                //文件尾部标识
                 case BLANK_MAGIC_CODE:
                     return new DispatchRequest(0, true /* success */);
                 //异常返回

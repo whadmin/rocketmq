@@ -1769,8 +1769,13 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 消息重发服务
+     * 将CommitLog位置信息存入ConsumeQueue和IndexFile
+     */
     class ReputMessageService extends ServiceThread {
 
+        //标识重放的坐标 只要reputFromOffset< CommitLog最新mappedFile字节内存缓存区pos就会触发同步
         private volatile long reputFromOffset = 0;
 
         public long getReputFromOffset() {
@@ -1815,23 +1820,27 @@ public class DefaultMessageStore implements MessageStore {
                     break;
                 }
 
-                // 获取从reputFromOffset开始的commitLog对应的MappeFile对应的MappedByteBuffer
+                // 通过offseth获取CommitLog下所属的mappedFile
+                // 返回从(offset % mappedFileSize 到 MappedFile.getReadPosition最大有效位置的所有数据，我们需要将mappedFileSize对应
+                // 字节缓存区的数据同步到ConsumeQueue和index中
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
                 if (result != null) {
                     try {
-                        //获取commitLog
+                        //设置更新reputFromOffset 到读取到字节缓存数据的开始位置
                         this.reputFromOffset = result.getStartOffset();
-                        // 遍历MappedByteBuffer
+                        // 遍历获取数据的字节缓冲区
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
-                            // 生成重放消息重放调度请求
+                            // 读取字节缓存区的一个Message数据产生重放调度请求
                             DispatchRequest dispatchRequest =
                                 DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
+                            //获取消息大小
                             int size = dispatchRequest.getMsgSize();
                             // 根据请求的结果处理
                             // 读取成功
                             if (dispatchRequest.isSuccess()) {
-                                // 读取Message
+                                //size>0表示读取到一条消息的重发请求
                                 if (size > 0) {
+                                    //交给CommitLogDispatcher 处理请求，这里有2个分别对应ConsumeQueue和IndexFile
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
                                     // 通知有新消息
                                     if (BrokerRole.SLAVE != DefaultMessageStore.this.getMessageStoreConfig().getBrokerRole()
@@ -1841,7 +1850,7 @@ public class DefaultMessageStore implements MessageStore {
                                             dispatchRequest.getTagsCode(), dispatchRequest.getStoreTimestamp(),
                                             dispatchRequest.getBitMap(), dispatchRequest.getPropertiesMap());
                                     }
-
+                                    //每重发一条消息更新
                                     this.reputFromOffset += size;
                                     readSize += size;
                                     // 统计
@@ -1852,12 +1861,13 @@ public class DefaultMessageStore implements MessageStore {
                                             .getSinglePutMessageTopicSizeTotal(dispatchRequest.getTopic())
                                             .addAndGet(dispatchRequest.getMsgSize());
                                     }
-                                    // 读取到MappedFile文件尾
+                                // 读取文件尾部标识
                                 } else if (size == 0) {
+                                    //获取reputFromOffset 坐标对应mappedFile的下一个mappedFile其实物理坐标 设置到
                                     this.reputFromOffset = DefaultMessageStore.this.commitLog.rollNextFile(this.reputFromOffset);
                                     readSize = result.getSize();
                                 }
-                                // 读取失败
+                            // 读取失败
                             } else if (!dispatchRequest.isSuccess()) {
                                 // 读取到Message却不是Message
                                 if (size > 0) {

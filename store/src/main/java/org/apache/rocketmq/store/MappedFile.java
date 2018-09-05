@@ -765,7 +765,6 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * 返回MappedFile对应字节缓冲区区Pos偏移（可能是mappedByteBuffer对应wrotePosition，也可能是writeBuffer对应committedPosition）
-     *
      * @return
      */
     public int getReadPosition() {

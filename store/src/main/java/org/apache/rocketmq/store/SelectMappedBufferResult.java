@@ -18,15 +18,18 @@ package org.apache.rocketmq.store;
 
 import java.nio.ByteBuffer;
 
+/**
+ * 依据偏移获取到CommitLog对应MappedFile中的字节数据
+ */
 public class SelectMappedBufferResult {
 
     /**
-     * 开始位置，是绝对偏移，20位long型
+     * 开始位置，是绝对偏移，数据在CommitLog中的物理坐标
      */
     private final long startOffset;
 
     /**
-     * 对应的byteBuffer
+     * 返回字节缓冲区，包含了对应的数据
      */
     private final ByteBuffer byteBuffer;
 
