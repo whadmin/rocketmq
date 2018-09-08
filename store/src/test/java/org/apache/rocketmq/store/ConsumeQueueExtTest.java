@@ -30,7 +30,7 @@ public class ConsumeQueueExtTest {
 
     private static final String topic = "abc";
     private static final int queueId = 0;
-    private static final String storePath = "." + File.separator + "unit_test_store";
+    private static final String storePath = System.getProperty("user.home") + File.separator + "store" + File.separator + "unit_test_store";
     private static final int bitMapLength = 64;
     private static final int unitSizeWithBitMap = ConsumeQueueExt.CqExtUnit.MIN_EXT_UNIT_SIZE + bitMapLength / Byte.SIZE;
     private static final int cqExtFileSize = 10 * unitSizeWithBitMap;

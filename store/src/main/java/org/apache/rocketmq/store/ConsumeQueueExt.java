@@ -28,36 +28,65 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * Extend of consume queue, to store something not important,
- * such as message store time, filter bit map and etc.
+ * 表述消费队列的扩展属性数据
+ *
+ * 在MessageStoreConfig#enableConsumeQueueExt为true时生效
+ * 存储与文件队列系统中
+ * 默认路径 {user.home}/store/consumequeue_ext/{topic}/{queueId}/
+ *
+ * MappedFile 文件存储数据结构为CqExtUnit
  * <p/>
- * <li>1. This class is used only by {@link ConsumeQueue}</li>
- * <li>2. And is week reliable.</li>
- * <li>3. Be careful, address returned is always less than 0.</li>
- * <li>4. Pls keep this file small.</li>
+ * <li>1. 此类仅供{@link ConsumeQueue}使用</li>
+ * <li>2. 一周可靠。</li>
+ * <li>3. 注意，返回的地址总是小于0。</li>
+ * <li>4. 请保持此文件小。</li>
  */
 public class ConsumeQueueExt {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    /**
+     * consumeQueueExt文件队列
+     */
     private final MappedFileQueue mappedFileQueue;
-    private final String topic;
-    private final int queueId;
-
-    private final String storePath;
-    private final int mappedFileSize;
-    private ByteBuffer tempContainer;
-
-    public static final int END_BLANK_DATA_LENGTH = 4;
 
     /**
-     * Addr can not exceed this value.For compatible.
+     * ConsumeQueueExt 从属于topic
      */
+    private final String topic;
+
+    /**
+     * ConsumeQueueExt 从属于queueId
+     */
+    private final int queueId;
+
+    /**
+     * consumeQueueExt存储路径，
+     * 默认 user.home/store/consumequeue_ext
+     */
+    private final String storePath;
+
+    /**
+     * consumeQueueExt文件队列中文件大小，默认48M
+     */
+    private final int mappedFileSize;
+
+    /**
+     * 临时存储数据字节缓冲区
+     */
+    private ByteBuffer tempContainer;
+
+    /**
+     * consumeQueueExt文件结尾需要预留4字节空白
+     */
+    public static final int END_BLANK_DATA_LENGTH = 4;
+
+
     public static final long MAX_ADDR = Integer.MIN_VALUE - 1L;
     public static final long MAX_REAL_OFFSET = MAX_ADDR - Long.MIN_VALUE;
 
     /**
-     * Constructor.
-     *
+     * 构造
      * @param topic topic
      * @param queueId id of queue
      * @param storePath root dir of files to store.
@@ -90,23 +119,17 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Check whether {@code address} point to extend file.
-     * <p>
-     * Just test {@code address} is less than 0.
-     * </p>
+     * 检查{@code address}cqExtUnit偏移坐标是否小于MAX_ADDR（-2147483649）
      */
     public static boolean isExtAddr(final long address) {
         return address <= MAX_ADDR;
     }
 
     /**
-     * Transform {@code address}(decorated by {@link #decorate}) to offset in mapped file.
-     * <p>
-     * if {@code address} is less than 0, return {@code address} - {@link java.lang.Long#MIN_VALUE};
-     * else, just return {@code address}
-     * </p>
+     * 对存储cqExtUnit偏移坐标进行解码
      */
     public long unDecorate(final long address) {
+        //如果存储cqExtUnit编码后偏移坐标<=MAX_ADDR（-2147483649）进行编码
         if (isExtAddr(address)) {
             return address - Long.MIN_VALUE;
         }
@@ -114,15 +137,10 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Decorate {@code offset} from mapped file, in order to distinguish with tagsCode(saved in cq originally).
-     * <p>
-     * if {@code offset} is greater than or equal to 0, then return {@code offset} + {@link java.lang.Long#MIN_VALUE};
-     * else, just return {@code offset}
-     * </p>
-     *
-     * @return ext address(value is less than 0)
+     * 对存储cqExtUnit偏移坐标进行编码
      */
     public long decorate(final long offset) {
+        //如果存储cqExtUnit偏移坐标>MAX_ADDR（-2147483649）进行编码
         if (!isExtAddr(offset)) {
             return offset + Long.MIN_VALUE;
         }
@@ -130,12 +148,13 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Get data from buffer.
-     *
+     * 获取ConsumeQueueExt中address偏移坐标后存储的CqExtUnit数据
      * @param address less than 0
      */
     public CqExtUnit get(final long address) {
+        //创建CqExtUnit
         CqExtUnit cqExtUnit = new CqExtUnit();
+        //获取ConsumeQueueExt中address偏移坐标后存储的CqExtUnit数据
         if (get(address, cqExtUnit)) {
             return cqExtUnit;
         }
@@ -144,8 +163,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Get data from buffer, and set to {@code cqExtUnit}
-     *
+     * 获取ConsumeQueueExt中address偏移坐标后存储的CqExtUnit数据
      * @param address less than 0
      */
     public boolean get(final long address, final CqExtUnit cqExtUnit) {
@@ -179,45 +197,49 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Save to mapped buffer of file and return address.
-     * <p>
-     * Be careful, this method is not thread safe.
-     * </p>
-     *
-     * @return success: < 0: fail: >=0
+     * 将cqExtUnit数据写入ConsumeQueueExt文件系统中
      */
     public long put(final CqExtUnit cqExtUnit) {
+        //重试次数
         final int retryTimes = 3;
         try {
+            //获取cqExtUnit数据结构大小，校验大小大于MAX_EXT_UNIT_SIZE
             int size = cqExtUnit.calcUnitSize();
             if (size > CqExtUnit.MAX_EXT_UNIT_SIZE) {
                 log.error("Size of cq ext unit is greater than {}, {}", CqExtUnit.MAX_EXT_UNIT_SIZE, cqExtUnit);
                 return 1;
             }
+            //校验ConsumeQueueExt文件MappedFileQueue中最后一个MappedFile追加cqExtUnit是否大于MAX_REAL_OFFSET
             if (this.mappedFileQueue.getMaxOffset() + size > MAX_REAL_OFFSET) {
                 log.warn("Capacity of ext is maximum!{}, {}", this.mappedFileQueue.getMaxOffset(), size);
                 return 1;
             }
-            // unit size maybe change.but, the same most of the time.
+            //创建一个临时字节缓冲区
             if (this.tempContainer == null || this.tempContainer.capacity() < size) {
                 this.tempContainer = ByteBuffer.allocate(size);
             }
 
+            //重试3次
             for (int i = 0; i < retryTimes; i++) {
+                //返回ConsumeQueueExt文件队列中最后一个mappedFile
                 MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
 
+                //校验mappedFile是否写满，如果已经写满创建出新的mappedFile
                 if (mappedFile == null || mappedFile.isFull()) {
                     mappedFile = this.mappedFileQueue.getLastMappedFile(0);
                 }
 
+                //校验异常
                 if (mappedFile == null) {
                     log.error("Create mapped file when save consume queue extend, {}", cqExtUnit);
                     continue;
                 }
+
+                //获取文件可以写入的字节数据
                 final int wrotePosition = mappedFile.getWrotePosition();
                 final int blankSize = this.mappedFileSize - wrotePosition - END_BLANK_DATA_LENGTH;
 
-                // check whether has enough space.
+                // 校验当前是否能满足写入cqExtUnit，.
                 if (size > blankSize) {
                     fullFillToEnd(mappedFile, wrotePosition);
                     log.info("No enough space(need:{}, has:{}) of file {}, so fill to end",
@@ -225,7 +247,9 @@ public class ConsumeQueueExt {
                     continue;
                 }
 
+                //cqExtUnit数据写入mappedFile文件中
                 if (mappedFile.appendMessage(cqExtUnit.write(this.tempContainer), 0, size)) {
+                    //返回写入cqExtUnit数据写入的偏移坐标
                     return decorate(wrotePosition + mappedFile.getFileFromOffset());
                 }
             }
@@ -405,13 +429,17 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Store unit.
+     * 表述了ConsumeQueueExt管理下mappedFile里面存放的数据结构
      */
     public static class CqExtUnit {
+
+        //表示CqExtUnit结构中除了filterBitMap之外，其他属性占用的总字节长度大小
+        //size(short) + tagsCode(long) + msgStoreTime(long) + bitMapSize(short) = 20字节
         public static final short MIN_EXT_UNIT_SIZE
             = 2 * 1 // size, 32k max
             + 8 * 2 // msg time + tagCode
             + 2; // bitMapSize
+
 
         public static final int MAX_EXT_UNIT_SIZE = Short.MAX_VALUE;
 
@@ -427,28 +455,28 @@ public class ConsumeQueueExt {
         }
 
         /**
-         * unit size
+         * CqExtUnit 结构占用的总大小 MIN_EXT_UNIT_SIZE + this.bitMapSize
          */
         private short size;
         /**
-         * has code of tags
+         * tagsCode
          */
         private long tagsCode;
         /**
-         * the time to store into commit log of message
+         * CqExtUnit存储时间
          */
         private long msgStoreTime;
         /**
-         * size of bit map
+         * bitMapSize数据长度
          */
         private short bitMapSize;
         /**
-         * filter bit map
+         * filterBitMap数据
          */
         private byte[] filterBitMap;
 
         /**
-         * build unit from buffer from current position.
+         *
          */
         private boolean read(final ByteBuffer buffer) {
             if (buffer.position() + 2 > buffer.limit()) {

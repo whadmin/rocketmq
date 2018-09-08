@@ -1770,8 +1770,8 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 消息重发服务
-     * 将CommitLog位置信息存入ConsumeQueue和IndexFile
+     * 消息调度请求服务
+     * 将消息CommitLog位置信息,同步到ConsumeQueue和Index数据
      */
     class ReputMessageService extends ServiceThread {
 
@@ -1820,17 +1820,16 @@ public class DefaultMessageStore implements MessageStore {
                     break;
                 }
 
-                // 通过offseth获取CommitLog下所属的mappedFile
-                // 返回从(offset % mappedFileSize 到 MappedFile.getReadPosition最大有效位置的所有数据，我们需要将mappedFileSize对应
-                // 字节缓存区的数据同步到ConsumeQueue和index中
+                // 通过reputFromOffset获取CommitLog下所属的mappedFile
+                // 返回从(reputFromOffset 到 MappedFile.getReadPosition的消息数据ByteBuffer 同步到ConsumeQueue和index中
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
                 if (result != null) {
                     try {
-                        //设置更新reputFromOffset 到读取到字节缓存数据的开始位置
+                        //设置更新reputFromOffset=ByteBuffer.pos
                         this.reputFromOffset = result.getStartOffset();
                         // 遍历获取数据的字节缓冲区
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
-                            // 读取字节缓存区的一个Message数据产生重放调度请求
+                            // 读取ByteBuffer字节缓存区的一个Message数据生成调度请求
                             DispatchRequest dispatchRequest =
                                 DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
                             //获取消息大小

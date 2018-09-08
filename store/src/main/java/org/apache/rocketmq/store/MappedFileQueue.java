@@ -29,6 +29,9 @@ import org.apache.rocketmq.common.constant.LoggerName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 描述ConsumeQueue CommitLog Index 文件队列
+ */
 public class MappedFileQueue {
 
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -321,7 +324,9 @@ public class MappedFileQueue {
             MappedFile mappedFile = null;
 
 
-            //创建mappedFiles，可以使用allocateMappedFileService，也可以直接创建
+            //创建mappedFiles，可以创建有2中方式
+            // 1 使用allocateMappedFileService，
+            // 2 手动直接创建
             if (this.allocateMappedFileService != null) {
                 mappedFile = this.allocateMappedFileService.putRequestAndReturnMappedFile(nextFilePath,
                     nextNextFilePath, this.mappedFileSize);

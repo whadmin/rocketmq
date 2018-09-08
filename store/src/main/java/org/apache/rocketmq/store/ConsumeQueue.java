@@ -35,7 +35,7 @@ public class ConsumeQueue {
 
     private final DefaultMessageStore defaultMessageStore;
     /**
-     * 映射文件队列
+     * ConsumeQueue 对应的MappedFileQueue
      */
     private final MappedFileQueue mappedFileQueue;
     /**
@@ -59,13 +59,21 @@ public class ConsumeQueue {
      */
     private final int mappedFileSize;
     /**
-     * 最大重放消息commitLog存储位置
+     *
      */
     private long maxPhysicOffset = -1;
 
     private volatile long minLogicOffset = 0;
     private ConsumeQueueExt consumeQueueExt = null;
 
+    /**
+     * 构造
+     * @param topic
+     * @param queueId
+     * @param storePath
+     * @param mappedFileSize
+     * @param defaultMessageStore
+     */
     public ConsumeQueue(
         final String topic,
         final int queueId,
@@ -87,6 +95,7 @@ public class ConsumeQueue {
 
         this.byteBufferIndex = ByteBuffer.allocate(CQ_STORE_UNIT_SIZE);
 
+        //是否打开消息的ConsumeQueue扩展功能
         if (defaultMessageStore.getMessageStoreConfig().isEnableConsumeQueueExt()) {
             this.consumeQueueExt = new ConsumeQueueExt(
                 topic,
@@ -98,6 +107,11 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 加载mappedFileQueue文件到内存
+     * 如果拓展文件可读，接着加载ConsumeQueueExt
+     * @return
+     */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
         log.info("load consume queue " + this.topic + "-" + this.queueId + " " + (result ? "OK" : "Failed"));
@@ -107,6 +121,12 @@ public class ConsumeQueue {
         return result;
     }
 
+    /**
+     * 用于设定maxPhysicOffset以及更新最后三个mappedFile的flush,commitPosition
+     * 1.从前往后读取最后三个mappedFile，依次读取记录，如果有效，更新maxPhysicOffset以及maxExtAddr
+     * 2.出现第一个无效记录的位置记为processOffset，设置flush,commitPosition，清除mappedFileQueue之后的记录
+     * 3.如果开启ext，清除maxExtAddr之后的记录
+     */
     public void recover() {
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
         if (!mappedFiles.isEmpty()) {
@@ -174,6 +194,11 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 找到消息发送时间最接近timestamp逻辑队列的offset
+     * @param timestamp
+     * @return
+     */
     public long getOffsetInQueueByTime(final long timestamp) {
         MappedFile mappedFile = this.mappedFileQueue.getMappedFileByTime(timestamp);
         if (mappedFile != null) {
@@ -243,6 +268,13 @@ public class ConsumeQueue {
         return 0;
     }
 
+    /**
+     * 删除phyOffet之后的脏文件(包括同mappedFile之后记录,通过修改wrotePosition保证) * 如果开启ext，找到maxExtAddr，把ext的脏文件也删除掉 * *
+     * 1:依次处理最后一个，倒数第二个MappedFile。。。 *
+     * 2.每个文件从第一个数据块开始解析，如果超过phyOffet就，就删掉该文件 *
+     * 3.否则该文件继续遍历后续记录，不断修改wrote,commit和flushPosition,直到遍历结束或者数据块大小为空则返回 * 4.如果所有mappedFile都删完了，再truncateByMaxAddress
+     * @param phyOffet
+     */
     public void truncateDirtyLogicFiles(long phyOffet) {
 
         int logicFileSize = this.mappedFileSize;
@@ -398,6 +430,12 @@ public class ConsumeQueue {
         return this.minLogicOffset / CQ_STORE_UNIT_SIZE;
     }
 
+    /**
+     * putMessagePositionInfo的封装函数: *
+     * 1.重试30次，将DispatchRequest拆分 *
+     * 2.如果开启了ext，那么先向consumeQueueExt放置CqExtUnit记录, 且更新tagsCode *
+     * 3.调用putMessagePositionInfo * @param request
+     * */
     public void putMessagePositionInfoWrapper(DispatchRequest request) {
         final int maxRetries = 30;
         boolean canWrite = this.defaultMessageStore.getRunningFlags().isCQWriteable();

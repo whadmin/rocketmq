@@ -1152,11 +1152,11 @@ public class CommitLog {
     class DefaultAppendMessageCallback implements AppendMessageCallback {
         // 文件在最小固定长度结束时为空
         private static final int END_FILE_MIN_BLANK_LENGTH = 4 + 4;
-        // 存储消息Id的Buffer
+        // 存储消息Id数据的Buffer
         private final ByteBuffer msgIdMemory;
-        // 存储消息内容的Buffer（先写入msgStoreItemMemory，在将msgStoreItemMemory写入byteBuffer）
+        // 存储消息数据的Buffer（先写入msgStoreItemMemory，最后msgStoreItemMemory写入MappedFile对应的byteBuffer）
         private final ByteBuffer msgStoreItemMemory;
-        // 存储消息写入brokersocker地址的Buffer
+        // 存储消息brokersocker地址数据的Buffer
         private final ByteBuffer hostHolder = ByteBuffer.allocate(8);
 
         // 单个消息存储在文件中的最大大小，默认为512K 从defaultMessageStore.getMessageStoreConfig().getMaxMessageSize()获取
@@ -1186,14 +1186,14 @@ public class CommitLog {
         public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
             final MessageExtBrokerInner msgInner) {
 
-            // 计算出消息写入坐标
+            // 获取当前commitLog 物理偏移坐标
             long wroteOffset = fileFromOffset + byteBuffer.position();
-            // 重置hostHolder
+
+            // 重置hostHolder,将消息brokersocker地址数据写入hostHolder中
             this.resetByteBuffer(hostHolder, 8);
-            //构造消息ID = 消息写入地址 socket信息+写入的坐标位置
             String msgId = MessageDecoder.createMessageId(this.msgIdMemory, msgInner.getStoreHostBytes(hostHolder), wroteOffset);
 
-            // 从CommitLog.this.topicQueueTable获取consumequeue坐标【相当于消息在MappedFile顺序文件列表中的索引记录坐标和大小】
+            // 从CommitLog.this.topicQueueTable获取消息在 topic-queue队列逻辑坐标，初始化为0，每添加一条+1
             keyBuilder.setLength(0);
             keyBuilder.append(msgInner.getTopic());
             keyBuilder.append('-');
@@ -1205,11 +1205,10 @@ public class CommitLog {
                 CommitLog.this.topicQueueTable.put(key, queueOffset);
             }
 
-            // Transaction messages that require special handling
+            // 获取消息类型
             final int tranType = MessageSysFlag.getTransactionValue(msgInner.getSysFlag());
             switch (tranType) {
-                // Prepared and Rollback message is not consumed, will not enter the
-                // consumer queuec
+                // 当消息为事务消息中PREPARED，ROLLBACK设置 opic-queue队列逻辑坐标为0
                 case MessageSysFlag.TRANSACTION_PREPARED_TYPE:
                 case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE:
                     queueOffset = 0L;
@@ -1232,13 +1231,15 @@ public class CommitLog {
                 return new AppendMessageResult(AppendMessageStatus.PROPERTIES_SIZE_EXCEEDED);
             }
 
+
             //序列化消息Topic
             final byte[] topicData = msgInner.getTopic().getBytes(MessageDecoder.CHARSET_UTF8);
             //获取序列化消息Topic字节长度
             final int topicLength = topicData.length;
-
             //获取消息体Body字节长度
             final int bodyLength = msgInner.getBody() == null ? 0 : msgInner.getBody().length;
+
+
 
             //计算消息存储总字节长度
             final int msgLen = calMsgLength(bodyLength, topicLength, propertiesLength);
@@ -1249,17 +1250,18 @@ public class CommitLog {
                 return new AppendMessageResult(AppendMessageStatus.MESSAGE_SIZE_EXCEEDED);
             }
 
-            //校验总字节长度，如果当前MappedFile文件没办法存储当前消息的写入
+            //校验总字节长度，如果当前MappedFile文件没办法存储当前消息在MappedFile写入一条BLANK_MAGIC_CODE类型尾部消息
             if ((msgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
-                //设置文件的消息的字节缓冲区的limit为maxBlank
+                //设置msgStoreItemMemory区的limit为maxBlank
                 this.resetByteBuffer(this.msgStoreItemMemory, maxBlank);
                 // 1 追加maxBlank长度
                 this.msgStoreItemMemory.putInt(maxBlank);
                 // 2 追加文件结束空MAGIC CODE
                 this.msgStoreItemMemory.putInt(CommitLog.BLANK_MAGIC_CODE);
-                // 3 msgStoreItemMemory 添加到文件对应 byteBuffer，返回文件无法满足此消息写入，外部会创建一个新的MappedFile
+                // 3 msgStoreItemMemory 添加到MappedFile对应 byteBuffer
                 final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
                 byteBuffer.put(this.msgStoreItemMemory.array(), 0, maxBlank);
+                // 4 返回AppendMessageResult 类型为END_OF_FILE 表示文件无法满足此消息写入，外部会创建一个新的MappedFile重新写入
                 return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset, maxBlank, msgId, msgInner.getStoreTimestamp(),
                     queueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
             }
@@ -1276,9 +1278,9 @@ public class CommitLog {
             this.msgStoreItemMemory.putInt(msgInner.getQueueId());
             // 5 flag
             this.msgStoreItemMemory.putInt(msgInner.getFlag());
-            // 6 队列坐标量
+            // 6 队列逻辑偏移坐标
             this.msgStoreItemMemory.putLong(queueOffset);
-            // 7 物理坐标量
+            // 7 CommitLog物理偏移坐标
             this.msgStoreItemMemory.putLong(fileFromOffset + byteBuffer.position());
             // 8 sysflag
             this.msgStoreItemMemory.putInt(msgInner.getSysFlag());
@@ -1310,7 +1312,7 @@ public class CommitLog {
                 this.msgStoreItemMemory.put(propertiesData);
 
             final long beginTimeMills = CommitLog.this.defaultMessageStore.now();
-            // Write messages to the queue buffer
+            // msgStoreItemMemory 添加到MappedFile对应 byteBuffer
             byteBuffer.put(this.msgStoreItemMemory.array(), 0, msgLen);
 
             //构造返回结果
@@ -1343,12 +1345,12 @@ public class CommitLog {
         public AppendMessageResult doAppend(final long fileFromOffset, final ByteBuffer byteBuffer, final int maxBlank,
             final MessageExtBatch messageExtBatch) {
 
-            //标记消息坐标位置
+            //标记MappedFile对应字节缓冲区 pos坐标位置
             byteBuffer.mark();
-            //获取消息物理坐标量
+            //获取当前commitLog 物理偏移坐标
             long wroteOffset = fileFromOffset + byteBuffer.position();
 
-            // 从CommitLog.this.topicQueueTable获取consumequeue坐标【相当于消息在MappedFile顺序文件列表中的索引记录坐标和大小】
+            // 从CommitLog.this.topicQueueTable获取消息在 topic-queue队列逻辑坐标，初始化为0，每添加一条+1
             keyBuilder.setLength(0);
             keyBuilder.append(messageExtBatch.getTopic());
             keyBuilder.append('-');
@@ -1361,9 +1363,9 @@ public class CommitLog {
             }
             long beginQueueOffset = queueOffset;
 
-            //记录批量消息总长度
+            //记录批量消息总大小
             int totalMsgLen = 0;
-            //记录批量消息的总数据
+            //记录批量消息的总数量
             int msgNum = 0;
             //重置记录消息ID字符串长度0
             msgIdBuilder.setLength(0);
@@ -1372,19 +1374,21 @@ public class CommitLog {
 
             //获取MessageExtBatchEncoder.encode(messageExtBatch)的字节缓冲区对象
             ByteBuffer messagesByteBuff = messageExtBatch.getEncodedBuff();
-            //标记消息坐标位置
+            //标记messagesByteBuff pos位置
             messagesByteBuff.mark();
 
-            //获取将socket地址写入byteBuffer
+            //重置hostHolder,将消息brokersocker地址数据写入hostHolder中
             this.resetByteBuffer(hostHolder, 8);
-            //获取将socket地址写入byteBuffer
             ByteBuffer storeHostBytes = messageExtBatch.getStoreHostBytes(hostHolder);
 
-            //遍历messagesByteBuff 将消息数据写入文件字节缓存区中
+            //遍历messagesByteBuff 一条消息一条消息的解析,覆盖messageExtBatch.getEncodedBuff()缓冲区中每条消息的
+            //topic-queue队列逻辑坐标和CommitLog物理偏移坐标
             while (messagesByteBuff.hasRemaining()) {
-                // 1 TOTALSIZE
+                // 1 获取消息的pos
                 final int msgPos = messagesByteBuff.position();
+                // 2 读取消息+元数据总长度
                 final int msgLen = messagesByteBuff.getInt();
+                // 3 计算出消息的body大小长度
                 final int bodyLen = msgLen - 40; //only for log, just estimate it
                 // 校验批量消息中一条交易消息的长度
                 if (msgLen > this.maxMessageSize) {
@@ -1393,8 +1397,9 @@ public class CommitLog {
                     return new AppendMessageResult(AppendMessageStatus.MESSAGE_SIZE_EXCEEDED);
                 }
                 totalMsgLen += msgLen;
-                //校验批量消息总长度
+                //校验总字节长度，如果当前MappedFile文件没办法存储当前消息在MappedFile写入一条BLANK_MAGIC_CODE类型尾部消息
                 if ((totalMsgLen + END_FILE_MIN_BLANK_LENGTH) > maxBlank) {
+                    //设置msgStoreItemMemory区的limit为maxBlank
                     this.resetByteBuffer(this.msgStoreItemMemory, 8);
                     // 1 追加maxBlank长度
                     this.msgStoreItemMemory.putInt(maxBlank);
@@ -1404,22 +1409,23 @@ public class CommitLog {
                     messagesByteBuff.reset();
                     // 4 重置byteBuffer
                     byteBuffer.reset();
-                    // 5 msgStoreItemMemory 添加到文件对应 byteBuffer，返回文件无法满足此消息写入，外部会创建一个新的MappedFile
+                    // 5 msgStoreItemMemory 添加到MappedFile对应 byteBuffer
                     byteBuffer.put(this.msgStoreItemMemory.array(), 0, 8);
+                    // 4 返回AppendMessageResult 类型为END_OF_FILE 表示文件无法满足此消息写入，外部会创建一个新的MappedFile重新写入
                     return new AppendMessageResult(AppendMessageStatus.END_OF_FILE, wroteOffset, maxBlank, msgIdBuilder.toString(), messageExtBatch.getStoreTimestamp(),
                         beginQueueOffset, CommitLog.this.defaultMessageStore.now() - beginTimeMills);
                 }
-                //移动以添加队列偏移量和commitlog偏移量
+                //移动以添加队列偏移量到msgPos + 20  消息topic-queue队列逻辑坐标
                 messagesByteBuff.position(msgPos + 20);
 
                 /**
-                 * 覆盖messagesByteBuff中队列偏移量 MessageExtBatchEncoder.encode方法中设置为0
+                 * 覆盖messagesByteBuff中消息topic-queue队列逻辑坐标 MessageExtBatchEncoder.encode方法中设置为0
                  * 6 QUEUEOFFSET
                  * this.msgBatchMemory.putLong(0);
                  */
                 messagesByteBuff.putLong(queueOffset);
                 /**
-                 * 覆盖messagesByteBuff中物理偏移量 MessageExtBatchEncoder.encode方法中设置为0
+                 * 覆盖messagesByteBuff中CommitLog物理偏移坐标 MessageExtBatchEncoder.encode方法中设置为0
                  * 6 QUEUEOFFSET
                  * this.msgBatchMemory.putLong(0);
                  */
@@ -1434,10 +1440,11 @@ public class CommitLog {
                 } else {
                     msgIdBuilder.append(msgId);
                 }
-                //队列偏移+1
+                //消息topic-queue队列逻辑坐标+1
                 queueOffset++;
-                //队列偏移+1
+                //队列数据+1
                 msgNum++;
+                //移动以添加队列偏移量到此消息结算的位置，for循环读取下一条消息
                 messagesByteBuff.position(msgPos + msgLen);
             }
 
@@ -1601,9 +1608,9 @@ public class CommitLog {
     }
 
     /**
-     * 检查消息并返回分发请求【用来同步创建index和consumequeue】
-     * @param byteBuffer  MappeFile对应的MappedByteBuffer分片缓存区，分片pos是ReputMessageService.reputFromOffset
-     * @param checkCRC    是否检查CRC
+     * 检查消息并生成消息调度请求【用来同步创建消息对应index和consumequeue数据】
+     * @param byteBuffer  selectMappedBuffer（ReputMessageService.reputFromOffset）获取得到MappeFile对应的MappedByteBuffer分片缓存区
+     * @param checkCRC    是否检查消息CRC
      * @return
      */
     public DispatchRequest checkMessageAndReturnSize(java.nio.ByteBuffer byteBuffer, final boolean checkCRC) {
@@ -1612,9 +1619,9 @@ public class CommitLog {
 
 
     /**
-     * 检查消息并返回分发请求【用来同步创建index和consumequeue】
-     * @param byteBuffer  MappeFile对应的MappedByteBuffer分片缓存区，分片pos是ReputMessageService.reputFromOffset
-     * @param checkCRC    是否检查CRC
+     * 检查消息并生成消息调度请求【用来同步创建消息对应index和consumequeue数据】
+     * @param byteBuffer  selectMappedBuffer（ReputMessageService.reputFromOffset）获取得到MappeFile对应的MappedByteBuffer分片缓存区
+     * @param checkCRC    是否检查消息CRC
      * @param readBody    checkCRC=true 时此值必须为true,检查CRC需要获取body加密,此属性感觉很鸡肋
      * @return
      */

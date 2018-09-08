@@ -18,21 +18,63 @@ package org.apache.rocketmq.store;
 
 import java.util.Map;
 
+/**
+ * 表示一条消息调度请求，用来同步生成消息ConsumeQueue和Index数据
+ */
 public class DispatchRequest {
+    /**
+     * 消息topic
+     */
     private final String topic;
+    /**
+     * 消息存储queueId
+     */
     private final int queueId;
+    /**
+     * 消息commitLog物理偏移坐标
+     */
     private final long commitLogOffset;
+    /**
+     * 消息大小
+     */
     private final int msgSize;
+    /**
+     * 消息的tag
+     */
     private final long tagsCode;
+    /**
+     * 消息的生成时间
+     */
     private final long storeTimestamp;
+    /**
+     * 消息consumeQueue逻辑偏移坐标
+     */
     private final long consumeQueueOffset;
+    /**
+     * 消息keys
+     */
     private final String keys;
+    /**
+     * 是否生成成功
+     */
     private final boolean success;
     private final String uniqKey;
 
+    /**
+     * 消息的同步方法
+     */
     private final int sysFlag;
+    /**
+     * prepare事务消息偏移坐标
+     */
     private final long preparedTransactionOffset;
+    /**
+     * 属性map
+     */
     private final Map<String, String> propertiesMap;
+    /**
+     *
+     */
     private byte[] bitMap;
 
     public DispatchRequest(
