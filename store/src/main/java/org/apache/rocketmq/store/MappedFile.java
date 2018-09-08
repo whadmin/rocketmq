@@ -44,12 +44,8 @@ import org.slf4j.LoggerFactory;
 import sun.nio.ch.DirectBuffer;
 
 /**
- * MappedFile 用来表示commitlog目录下一个数据存储文件表示对象
- * <p>
- * C:\Users\wuhao.w\store\commitlog
- * 00000000000000000000
- * 00000000000010485760
- * <p>
+ * MappedFile 用来表示文件队列中一个文件对象
+ *
  * MappedFile 有2中类型方式去追加消息数据
  * <p>
  * 1 使用TransientStorePool
@@ -519,7 +515,8 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 返回从pos到最大有效位置的所有数据
+     *
+     * 读取文件MappedFile对应字节缓冲区pos偏移坐标开始的字节数据
      * @param pos
      * @return
      */

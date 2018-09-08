@@ -18,12 +18,25 @@ package org.apache.rocketmq.store;
 
 public class RunningFlags {
 
+    /**
+     * 没有读取
+     */
     private static final int NOT_READABLE_BIT = 1;
 
+    /**
+     * 没有写入
+     */
     private static final int NOT_WRITEABLE_BIT = 1 << 1;
 
+
+    /**
+     * 写入ConsumeQueue文件队列异常
+     */
     private static final int WRITE_LOGICS_QUEUE_ERROR_BIT = 1 << 2;
 
+    /**
+     * 写入INDEX文件队列异常
+     */
     private static final int WRITE_INDEX_FILE_ERROR_BIT = 1 << 3;
 
     private static final int DISK_FULL_BIT = 1 << 4;

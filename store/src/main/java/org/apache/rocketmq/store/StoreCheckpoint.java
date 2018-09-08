@@ -31,12 +31,20 @@ import org.slf4j.LoggerFactory;
  * 文件存储监测
  */
 public class StoreCheckpoint {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
     private final RandomAccessFile randomAccessFile;
+
     private final FileChannel fileChannel;
+
     private final MappedByteBuffer mappedByteBuffer;
+
+    //CommitLog 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
     private volatile long physicMsgTimestamp = 0;
+    //ConsumeQueue 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
     private volatile long logicsMsgTimestamp = 0;
+    //index 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
     private volatile long indexMsgTimestamp = 0;
 
     public StoreCheckpoint(final String scpPath) throws IOException {

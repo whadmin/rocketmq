@@ -637,6 +637,15 @@ public class MappedFileQueue {
 
     /**
      * 通过offset在MappedFileQueue找到所属mappedFile
+     * @param offset
+     * @return
+     */
+    public MappedFile findMappedFileByOffset(final long offset) {
+        return findMappedFileByOffset(offset, false);
+    }
+
+    /**
+     * 通过offset在MappedFileQueue找到所属mappedFile
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.
      * @return Mapped file or null (when not found and returnFirstOnNotFound is <code>false</code>).
@@ -688,9 +697,7 @@ public class MappedFileQueue {
         return mappedFileFirst;
     }
 
-    public MappedFile findMappedFileByOffset(final long offset) {
-        return findMappedFileByOffset(offset, false);
-    }
+
 
     public long getMappedMemorySize() {
         long size = 0;

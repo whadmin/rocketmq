@@ -40,12 +40,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Store all metadata downtime for recovery, data protection reliability
+ * 表示消息存储数据，存储在MappedFileQueue文件队列中
+ * 默认路径 {user.home}/store/CommitLog/
  */
 public class CommitLog {
+
+    private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
     // 消息的MAGIC CODE daa320a7
     public final static int MESSAGE_MAGIC_CODE = 0xAABBCCDD ^ 1880681586 + 8;
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
     // 文件结束空MAGIC CODE cbd43194
     private final static int BLANK_MAGIC_CODE = 0xBBCCDDEE ^ 1880681586 + 8;
 
@@ -195,16 +198,16 @@ public class CommitLog {
         return this.mappedFileQueue.remainHowManyDataToFlush();
     }
 
-    /************************  读取CommitLog数据star  ************************/
+    /************************  读取CommitLog文件队列star  ************************/
     /**
-     * 依据offset读取CommitLog数据,
+     * 依据offset读取CommitLog文件队列,
      */
     public SelectMappedBufferResult getData(final long offset) {
         return this.getData(offset, offset == 0);
     }
 
     /**
-     * 依据offset读取CommitLog数据,
+     * 依据offset读取CommitLog文件队列数据,
      */
     public SelectMappedBufferResult getData(final long offset, final boolean returnFirstOnNotFound) {
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
@@ -212,14 +215,14 @@ public class CommitLog {
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, returnFirstOnNotFound);
         if (mappedFile != null) {
             int pos = (int) (offset % mappedFileSize);
-            // 返回从pos到最大有效位置的所有数据
+            // 读取文件MappedFile对应字节缓冲区pos偏移坐标开始的字节数据
             SelectMappedBufferResult result = mappedFile.selectMappedBuffer(pos);
             return result;
         }
 
         return null;
     }
-    /************************  读取CommitLog数据end  ************************/
+    /************************  读取CommitLog文件队列end  ************************/
 
 
     /************************  数据恢复star  ************************/
@@ -1278,9 +1281,9 @@ public class CommitLog {
             this.msgStoreItemMemory.putInt(msgInner.getQueueId());
             // 5 flag
             this.msgStoreItemMemory.putInt(msgInner.getFlag());
-            // 6 队列逻辑偏移坐标
+            // 6 ConsumeQueue队列逻辑偏移坐标
             this.msgStoreItemMemory.putLong(queueOffset);
-            // 7 CommitLog物理偏移坐标
+            // 7 CommitLog队列文件物理偏移坐标
             this.msgStoreItemMemory.putLong(fileFromOffset + byteBuffer.position());
             // 8 sysflag
             this.msgStoreItemMemory.putInt(msgInner.getSysFlag());
@@ -1419,13 +1422,13 @@ public class CommitLog {
                 messagesByteBuff.position(msgPos + 20);
 
                 /**
-                 * 覆盖messagesByteBuff中消息topic-queue队列逻辑坐标 MessageExtBatchEncoder.encode方法中设置为0
+                 * 覆盖消息 ConsumeQueue队列逻辑偏移坐标 MessageExtBatchEncoder.encode方法中设置为0
                  * 6 QUEUEOFFSET
                  * this.msgBatchMemory.putLong(0);
                  */
                 messagesByteBuff.putLong(queueOffset);
                 /**
-                 * 覆盖messagesByteBuff中CommitLog物理偏移坐标 MessageExtBatchEncoder.encode方法中设置为0
+                 *  覆盖消息 CommitLog队列文件物理偏移坐标 MessageExtBatchEncoder.encode方法中设置为0
                  * 6 QUEUEOFFSET
                  * this.msgBatchMemory.putLong(0);
                  */
@@ -1559,9 +1562,9 @@ public class CommitLog {
                 this.msgBatchMemory.putInt(messageExtBatch.getQueueId());
                 // 5 FLAG
                 this.msgBatchMemory.putInt(flag);
-                // 6 QUEUEOFFSET  这里暂时设置为0  DefaultAppendMessageCallback.doAppend覆盖
+                // 6 QUEUEOFFSET  ConsumeQueue队列逻辑偏移坐标 这里暂时设置为0  DefaultAppendMessageCallback.doAppend覆盖
                 this.msgBatchMemory.putLong(0);
-                // 7 PHYSICALOFFSET  这里暂时设置为0 DefaultAppendMessageCallback.doAppend覆盖
+                // 7 PHYSICALOFFSET CommitLog队列文件物理偏移坐标  这里暂时设置为0 DefaultAppendMessageCallback.doAppend覆盖
                 this.msgBatchMemory.putLong(0);
                 // 8 SYSFLAG
                 this.msgBatchMemory.putInt(messageExtBatch.getSysFlag());
@@ -1653,9 +1656,9 @@ public class CommitLog {
             int queueId = byteBuffer.getInt();
             //获取消息flag
             int flag = byteBuffer.getInt();
-            //获取消息存储队列存储坐标
+            //获取消息ConsumeQueue队列逻辑偏移坐标
             long queueOffset = byteBuffer.getLong();
-            //获取消息物理坐标量（MappedByteBuffer.fileFromOffset + MappedByteBuffer.position()存储起始坐标）
+            //获取消息CommitLog队列文件物理偏移坐标（MappedByteBuffer.fileFromOffset + MappedByteBuffer.position()存储起始坐标）
             long physicOffset = byteBuffer.getLong();
             //获取消息sysflag同步
             int sysFlag = byteBuffer.getInt();

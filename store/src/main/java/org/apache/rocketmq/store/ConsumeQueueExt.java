@@ -28,18 +28,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * 表述消费队列的扩展属性数据
- *
- * 在MessageStoreConfig#enableConsumeQueueExt为true时生效
- * 存储与文件队列系统中
+ * 在MessageStoreConfig#enableConsumeQueueExt==true时生效
+ * 消费队列的扩展属性数据，存储在MappedFileQueue文件队列中
  * 默认路径 {user.home}/store/consumequeue_ext/{topic}/{queueId}/
- *
  * MappedFile 文件存储数据结构为CqExtUnit
- * <p/>
- * <li>1. 此类仅供{@link ConsumeQueue}使用</li>
- * <li>2. 一周可靠。</li>
- * <li>3. 注意，返回的地址总是小于0。</li>
- * <li>4. 请保持此文件小。</li>
  */
 public class ConsumeQueueExt {
 
@@ -67,7 +59,7 @@ public class ConsumeQueueExt {
     private final String storePath;
 
     /**
-     * consumeQueueExt文件队列中文件大小，默认48M
+     * consumeQueueExt文件队列中文件mappedFile大小，默认48M
      */
     private final int mappedFileSize;
 
@@ -120,6 +112,7 @@ public class ConsumeQueueExt {
 
     /**
      * 检查{@code address}cqExtUnit偏移坐标是否小于MAX_ADDR（-2147483649）
+     * 用于判断式否需要进行编码解码
      */
     public static boolean isExtAddr(final long address) {
         return address <= MAX_ADDR;
@@ -148,7 +141,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * 获取ConsumeQueueExt中address偏移坐标后存储的CqExtUnit数据
+     * 获取ConsumeQueueExt文件队列address偏移坐标开始后第一条CqExtUnit数据
      * @param address less than 0
      */
     public CqExtUnit get(final long address) {
@@ -163,7 +156,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * 获取ConsumeQueueExt中address偏移坐标后存储的CqExtUnit数据
+     * 获取ConsumeQueueExt文件队列address偏移坐标开始后第一条CqExtUnit数据
      * @param address less than 0
      */
     public boolean get(final long address, final CqExtUnit cqExtUnit) {
@@ -171,16 +164,18 @@ public class ConsumeQueueExt {
             return false;
         }
 
+        //获取consumeQueueExt文件队列mappedFile文件大小
         final int mappedFileSize = this.mappedFileSize;
+        //对address偏移坐标解码
         final long realOffset = unDecorate(address);
-
+        //获取consumeQueueExt文件队列中realOffset所属的MappedFile对象
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(realOffset, realOffset == 0);
         if (mappedFile == null) {
             return false;
         }
 
+        //读取文件MappedFile对应字节缓冲区pos偏移坐标开始的字节数据
         int pos = (int) (realOffset % mappedFileSize);
-
         SelectMappedBufferResult bufferResult = mappedFile.selectMappedBuffer(pos);
         if (bufferResult == null) {
             log.warn("[BUG] Consume queue extend unit({}) is not found!", realOffset);
@@ -188,6 +183,7 @@ public class ConsumeQueueExt {
         }
         boolean ret = false;
         try {
+            //读取yteBuffer字节缓冲区中数据设置到CqExtUnit对应属性中
             ret = cqExtUnit.read(bufferResult.getByteBuffer());
         } finally {
             bufferResult.release();
@@ -197,7 +193,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * 将cqExtUnit数据写入ConsumeQueueExt文件系统中
+     * 将cqExtUnit数据写入ConsumeQueueExt文件队列
      */
     public long put(final CqExtUnit cqExtUnit) {
         //重试次数
@@ -209,7 +205,7 @@ public class ConsumeQueueExt {
                 log.error("Size of cq ext unit is greater than {}, {}", CqExtUnit.MAX_EXT_UNIT_SIZE, cqExtUnit);
                 return 1;
             }
-            //校验ConsumeQueueExt文件MappedFileQueue中最后一个MappedFile追加cqExtUnit是否大于MAX_REAL_OFFSET
+            //校验ConsumeQueueExt文件队列MappedFileQueue中最后一个MappedFile追加cqExtUnit是否大于MAX_REAL_OFFSET
             if (this.mappedFileQueue.getMaxOffset() + size > MAX_REAL_OFFSET) {
                 log.warn("Capacity of ext is maximum!{}, {}", this.mappedFileQueue.getMaxOffset(), size);
                 return 1;
@@ -260,6 +256,11 @@ public class ConsumeQueueExt {
         return 1;
     }
 
+    /**
+     * 设置mappedFile 文件对应字节缓冲区坐标到完结
+     * @param mappedFile
+     * @param wrotePosition
+     */
     protected void fullFillToEnd(final MappedFile mappedFile, final int wrotePosition) {
         ByteBuffer mappedFileBuffer = mappedFile.sliceByteBuffer();
         mappedFileBuffer.position(wrotePosition);
@@ -271,7 +272,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Load data from file when startup.
+     * 加载ConsumeQueueExt文件队列
      */
     public boolean load() {
         boolean result = this.mappedFileQueue.load();
@@ -280,7 +281,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Check whether the step size in mapped file queue is correct.
+     * 校验ConsumeQueueExt文件队列文件大小
      */
     public void checkSelf() {
         this.mappedFileQueue.checkSelf();
@@ -389,25 +390,21 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * flush buffer to file.
+     * 将写入到fileChannel的数据数据刷写到磁盘
      */
     public boolean flush(final int flushLeastPages) {
         return this.mappedFileQueue.flush(flushLeastPages);
     }
 
     /**
-     * delete files and directory.
+     * 删除ConsumeQueueExt队列文件
      */
     public void destroy() {
         this.mappedFileQueue.destroy();
     }
 
     /**
-     * Max address(value is less than 0).
-     * <p/>
-     * <p>
-     * Be careful: it's an address just when invoking this method.
-     * </p>
+     * 返回ConsumeQueueExt队列文件写入最CqExtUnit偏移坐标
      */
     public long getMaxAddress() {
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
@@ -418,7 +415,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Minus address saved in file.
+     * 返回ConsumeQueueExt队列文件最后一个MappedFile偏移坐标
      */
     public long getMinAddress() {
         MappedFile firstFile = this.mappedFileQueue.getFirstMappedFile();
@@ -476,43 +473,40 @@ public class ConsumeQueueExt {
         private byte[] filterBitMap;
 
         /**
-         *
+         * 读取yteBuffer字节缓冲区中数据设置到CqExtUnit对应属性中
          */
         private boolean read(final ByteBuffer buffer) {
+            //校验buffer数据长度需要大于2个字节
             if (buffer.position() + 2 > buffer.limit()) {
                 return false;
             }
 
+            //获取CqExtUnit总大小，并校验
             this.size = buffer.getShort();
-
             if (this.size < 1) {
                 return false;
             }
 
+            //设置tagsCode msgStoreTime bitMapSize
             this.tagsCode = buffer.getLong();
             this.msgStoreTime = buffer.getLong();
             this.bitMapSize = buffer.getShort();
 
+            //校验bitMapSize,如果小于说明不存在filterBitMap直接返回
             if (this.bitMapSize < 1) {
                 return true;
             }
 
+            //设置filterBitMap
             if (this.filterBitMap == null || this.filterBitMap.length != this.bitMapSize) {
                 this.filterBitMap = new byte[bitMapSize];
             }
-
             buffer.get(this.filterBitMap);
             return true;
         }
 
         /**
-         * Only read first 2 byte to get unit size.
-         * <p>
-         * if size > 0, then skip buffer position with size.
-         * </p>
-         * <p>
-         * if size <= 0, nothing to do.
-         * </p>
+         * 将MappedFileposition坐标指向下条CqExtUnit初始位置
          */
         private void readBySkip(final ByteBuffer buffer) {
             ByteBuffer temp = buffer.slice();
@@ -526,11 +520,7 @@ public class ConsumeQueueExt {
         }
 
         /**
-         * Transform unit data to byte array.
-         * <p/>
-         * <li>1. @{code container} can be null, it will be created if null.</li>
-         * <li>2. if capacity of @{code container} is less than unit size, it will be created also.</li>
-         * <li>3. Pls be sure that size of unit is not greater than {@link #MAX_EXT_UNIT_SIZE}</li>
+         * 读取CqExtUnit对应属性写入到ByteBuffer字节缓冲区中，返回字节数组
          */
         private byte[] write(final ByteBuffer container) {
             this.bitMapSize = (short) (filterBitMap == null ? 0 : filterBitMap.length);
