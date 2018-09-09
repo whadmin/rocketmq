@@ -135,7 +135,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * //转化mappedFiles成为 object[]数组
+     * 转化mappedFiles成为 object[]数组
      * @param reservedMappedFiles  mappedFiles.size() <= reservedMappedFiles 返回null ？为什么这么做
      * @return
      */
@@ -151,13 +151,9 @@ public class MappedFileQueue {
     }
 
     /**
-     * 处理坐标大于offset的MappedFile脏文件,
-     *
-     * 如果  file.getFileFromOffset() + this.mappedFileSize > offset > file.getFileFromOffset()
-     * 重置设置此MappedFile 所有坐标
-     *
-     * 如果 offset < file.getFileFromOffset()
-     * 销毁此MappedFile
+     * 清理MappedFileQueue文件队列中
+     * appedFile.getFileFromOffset() >  offset 脏文件,
+     * 并对offset坐标对应appedFile偏移坐标重置到offset % this.mappedFileSize
      */
     public void truncateDirtyFiles(long offset) {
         List<MappedFile> willRemoveFiles = new ArrayList<MappedFile>();
@@ -429,7 +425,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * 获取最后一个MappedFile写入位置
+     * 获取最后一个MappedFile字节缓冲区pos偏移坐标
      * @return
      */
     public long getMaxOffset() {
@@ -470,7 +466,7 @@ public class MappedFileQueue {
 
 
     /**
-     * 从mappedFiles清理最后一个mappedFile，并销毁此mappedFile
+     * 从mappedFiles销毁最后一个mappedFile，并从mappedFiles集合中移除
      */
     public void deleteLastMappedFile() {
         MappedFile lastMappedFile = getLastMappedFile();
@@ -535,9 +531,9 @@ public class MappedFileQueue {
     }
 
     /**
-     * 这里假定每个mappedFile的存储单元都是uniteSize这么大，而且0,unitSize等这些位置，存储的是一个long offset值
-     * 在所有mappedFile中，找到最后一条存储单元记录(mappedFileSize - unitSize),读取long代表该mappedFile的maxOffsetInLogicQueue
-     * 如果 maxOffsetInLogicQueue < offset 就删除掉
+     * 此方法只给ConsumeQueue使用
+     * 读取文件队列中所有mappedFile应字节缓冲区 跳过unitSize字节【ConsumeQueue中第一条数据结构为空结构需要跳过】，从pos为 this.mappedFileSize - unitSize开始读取
+     * 获取第一个long数据maxOffsetInLogicQueue【获取ConsumeQueue队列文件mappedFile中保存第一条消息数据对应Commitlog】,当maxOffsetInLogicQueue < offset删除此文件
      */
     public int deleteExpiredFileByOffset(long offset, int unitSize) {
         Object[] mfs = this.copyMappedFiles(0);
@@ -636,7 +632,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * 通过offset在MappedFileQueue找到所属mappedFile
+     * 通过offset偏移坐标获取在MappedFileQueue文件队列中从属mappedFile
      * @param offset
      * @return
      */
@@ -645,7 +641,7 @@ public class MappedFileQueue {
     }
 
     /**
-     * 通过offset在MappedFileQueue找到所属mappedFile
+     * 通过offset偏移坐标获取在MappedFileQueue文件队列中从属mappedFile
      * @param offset Offset.
      * @param returnFirstOnNotFound If the mapped file is not found, then return the first one.
      * @return Mapped file or null (when not found and returnFirstOnNotFound is <code>false</code>).
@@ -681,6 +677,10 @@ public class MappedFileQueue {
         return null;
     }
 
+    /**
+     * 获取文件队列中第一个mappedFile，不存在返回NULL
+     * @return
+     */
     public MappedFile getFirstMappedFile() {
         MappedFile mappedFileFirst = null;
 
@@ -698,7 +698,10 @@ public class MappedFileQueue {
     }
 
 
-
+    /**
+     * 获取mappedFiles列表对应对象数组
+     * @return
+     */
     public long getMappedMemorySize() {
         long size = 0;
 

@@ -168,7 +168,7 @@ public class ConsumeQueueExt {
         final int mappedFileSize = this.mappedFileSize;
         //对address偏移坐标解码
         final long realOffset = unDecorate(address);
-        //获取consumeQueueExt文件队列中realOffset所属的MappedFile对象
+        //获取consumeQueueExt文件队列中realOffset偏移所属的MappedFile对象
         MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(realOffset, realOffset == 0);
         if (mappedFile == null) {
             return false;
@@ -183,7 +183,7 @@ public class ConsumeQueueExt {
         }
         boolean ret = false;
         try {
-            //读取yteBuffer字节缓冲区中数据设置到CqExtUnit对应属性中
+            //读取bufferResult.getByteBuffer()字节缓冲区中数据设置到CqExtUnit对应属性中
             ret = cqExtUnit.read(bufferResult.getByteBuffer());
         } finally {
             bufferResult.release();
@@ -288,7 +288,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Recover.
+     * recover方法，是用来检测清理ConsumeQueueExt队列文件脏文件 流程参考ConsumeQueue
      */
     public void recover() {
         final List<MappedFile> mappedFiles = this.mappedFileQueue.getMappedFiles();
@@ -304,6 +304,7 @@ public class ConsumeQueueExt {
         long processOffset = mappedFile.getFileFromOffset();
         long mappedFileOffset = 0;
         CqExtUnit extUnit = new CqExtUnit();
+
         while (true) {
             extUnit.readBySkip(byteBuffer);
 
@@ -334,8 +335,9 @@ public class ConsumeQueueExt {
         this.mappedFileQueue.truncateDirtyFiles(processOffset);
     }
 
+
     /**
-     * Delete files before {@code minAddress}.
+     *  清理掉ConsumeQueueExt文件队列中 偏移坐标小于【minAddress】所有历史mappedFile文件
      *
      * @param minAddress less than 0
      */
@@ -367,8 +369,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * Delete files after {@code maxAddress}, and reset wrote/commit/flush position to last file.
-     *
+     * 清理掉ConsumeQueueExt文件队列中 偏移坐标大于【maxAddress偏移+其后一条cqExtUnit.getSize()】所有脏mappedFile文件
      * @param maxAddress less than 0
      */
     public void truncateByMaxAddress(final long maxAddress) {
@@ -404,7 +405,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * 返回ConsumeQueueExt队列文件写入最CqExtUnit偏移坐标
+     * 返回ConsumeQueueExt队列文件写入最后一条CqExtUnit数据偏移坐标
      */
     public long getMaxAddress() {
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
@@ -415,7 +416,7 @@ public class ConsumeQueueExt {
     }
 
     /**
-     * 返回ConsumeQueueExt队列文件最后一个MappedFile偏移坐标
+     * 返回ConsumeQueueExt队列文件第一个mappedFile偏移坐标
      */
     public long getMinAddress() {
         MappedFile firstFile = this.mappedFileQueue.getFirstMappedFile();
@@ -506,7 +507,7 @@ public class ConsumeQueueExt {
         }
 
         /**
-         * 将MappedFileposition坐标指向下条CqExtUnit初始位置
+         * 将MappedFile position坐标指向下条CqExtUnit初始位置
          */
         private void readBySkip(final ByteBuffer buffer) {
             ByteBuffer temp = buffer.slice();

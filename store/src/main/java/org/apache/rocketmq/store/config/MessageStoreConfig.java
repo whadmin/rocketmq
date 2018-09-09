@@ -65,7 +65,9 @@ public class MessageStoreConfig {
     // Whether schedule flush,default is real-time
     @ImportantField
     private boolean flushCommitLogTimed = false;
-    // ConsumeQueue flush interval
+    /**
+     * ConsumeQueue 刷盘间隔
+     */
     private int flushIntervalConsumeQueue = 1000;
     // Resource reclaim interval
     private int cleanResourceInterval = 10000;
@@ -96,7 +98,7 @@ public class MessageStoreConfig {
     private int commitCommitLogLeastPages = 4;
     // Flush page size when the disk in warming state
     private int flushLeastPagesWhenWarmMapedFile = 1024 / 4 * 16;
-    // How many pages are to be flushed when flush ConsumeQueue
+    // 刷新ConsumeQueue时要刷新多少页
     private int flushConsumeQueueLeastPages = 2;
     private int flushCommitLogThoroughInterval = 1000 * 10;
     private int commitCommitLogThoroughInterval = 200;

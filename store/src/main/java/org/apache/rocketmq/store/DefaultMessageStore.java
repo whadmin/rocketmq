@@ -1170,6 +1170,13 @@ public class DefaultMessageStore implements MessageStore {
         return null;
     }
 
+    /**
+     * 从consumeQueueTable查找topic queueId 对应ConsumeQueue，不存在则创建一个ConsumeQueue，
+     * 添加到consumeQueueTable
+     * @param topic
+     * @param queueId
+     * @return
+     */
     public ConsumeQueue findConsumeQueue(String topic, int queueId) {
         ConcurrentMap<Integer, ConsumeQueue> map = consumeQueueTable.get(topic);
         if (null == map) {
@@ -1390,10 +1397,6 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
-
-
-
-
     public AllocateMappedFileService getAllocateMappedFileService() {
         return allocateMappedFileService;
     }
@@ -1432,6 +1435,10 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 添加消息位置信息到ConsumeQueue
+     * @param dispatchRequest
+     */
     public void putMessagePositionInfo(DispatchRequest dispatchRequest) {
         ConsumeQueue cq = this.findConsumeQueue(dispatchRequest.getTopic(), dispatchRequest.getQueueId());
         cq.putMessagePositionInfoWrapper(dispatchRequest);
@@ -1473,6 +1480,10 @@ public class DefaultMessageStore implements MessageStore {
         }, 6, TimeUnit.SECONDS);
     }
 
+
+    /**
+     * CommitLog消息数据同步到ConsumeQueue文件队列中
+     */
     class CommitLogDispatcherBuildConsumeQueue implements CommitLogDispatcher {
 
         @Override
@@ -1490,6 +1501,10 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * CommitLog消息数据同步到 index文件队列中
+     * indexService 是索引的核心实现
+     */
     class CommitLogDispatcherBuildIndex implements CommitLogDispatcher {
 
         @Override
@@ -1500,6 +1515,9 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 定时清理过期的CommitLog队列文件服务
+     */
     class CleanCommitLogService {
 
         private final static int MAX_MANUAL_DELETE_FILE_TIMES = 20;
@@ -1658,6 +1676,9 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 定时清理过期的ConsumeQueue队列文件服务
+     */
     class CleanConsumeQueueService {
         private long lastPhysicalMinOffset = 0;
 
@@ -1700,6 +1721,11 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 扫描ConsumeQueue队列文件中字节缓冲区的数据刷写如磁盘
+     *
+     * 【CommitLog刷写如磁盘服务在CommitLog内部类中，没有和ConsumeQueue保持一致】
+     */
     class FlushConsumeQueueService extends ServiceThread {
         private static final int RETRY_TIMES_OVER = 3;
         private long lastFlushTimestamp = 0;
@@ -1821,23 +1847,19 @@ public class DefaultMessageStore implements MessageStore {
                 }
 
                 // 通过reputFromOffset获取CommitLog下所属的mappedFile
-                // 返回从(reputFromOffset 到 MappedFile.getReadPosition的消息数据ByteBuffer 同步到ConsumeQueue和index中
+                // 返回从mappedFile.ByteBuffer(reputFromOffset --> MappedFile.getReadPosition)分片 同步到ConsumeQueue和index中
                 SelectMappedBufferResult result = DefaultMessageStore.this.commitLog.getData(reputFromOffset);
                 if (result != null) {
                     try {
-                        //设置更新reputFromOffset=ByteBuffer.pos
+                        //更新reputFromOffset=ByteBuffer.pos
                         this.reputFromOffset = result.getStartOffset();
-                        // 遍历获取数据的字节缓冲区
+                        // 遍历result中数据中每一条Message消息构造成一条调度请求同步生成
                         for (int readSize = 0; readSize < result.getSize() && doNext; ) {
-                            // 读取ByteBuffer字节缓存区的一个Message数据生成调度请求
+                            // 读取ByteBuffer字节缓存区的一条Message构造成一条调度请求同步生成
                             DispatchRequest dispatchRequest =
                                 DefaultMessageStore.this.commitLog.checkMessageAndReturnSize(result.getByteBuffer(), false, false);
-                            //获取消息大小
                             int size = dispatchRequest.getMsgSize();
-                            // 根据请求的结果处理
-                            // 读取成功
                             if (dispatchRequest.isSuccess()) {
-                                //size>0表示读取到一条消息的重发请求
                                 if (size > 0) {
                                     //交给CommitLogDispatcher 处理请求，这里有2个分别对应ConsumeQueue和IndexFile
                                     DefaultMessageStore.this.doDispatch(dispatchRequest);
@@ -1868,12 +1890,12 @@ public class DefaultMessageStore implements MessageStore {
                                 }
                             // 读取失败
                             } else if (!dispatchRequest.isSuccess()) {
-                                // 读取到Message却不是Message
+                                // 读取到Message构造成一条调度请求 发现异常BUG
                                 if (size > 0) {
                                     log.error("[BUG]read total count not equals msg total size. reputFromOffset={}", reputFromOffset);
                                     this.reputFromOffset += size;
                                 }
-                                // 读取到Blank却不是Blank
+                                // 读取到Message是Blank却不是Blank  发现异常BUG
                                 else {
                                     doNext = false;
                                     if (DefaultMessageStore.this.brokerConfig.getBrokerId() == MixAll.MASTER_ID) {
