@@ -40,7 +40,30 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 表示消息存储数据，存储在MappedFileQueue文件队列中
+ * MQ将消息数据信息以固定结构 存储到ConsumeQueue队列文件队列中
+ *
+ * 第几位 	数据类型 	   说明
+     1 	    int 	 TOTALSIZE 	消息+元数据总长度
+     2 	    int 	MAGICCODE 	魔数，固定值
+     3 	    int 	BODYCRC 	消息crc
+     4 	    int 	QUEUEID 	队列id
+     5 	    int 	FLAG 	flag
+     6 	    long 	QUEUEOFFSET 	队列偏移量
+     7 	    long 	PHYSICALOFFSET 	物理偏移量
+     8 	    long 	SYSFLAG 	sysflag
+     9 	    long 	BORNTIMESTAMP 	消息产生时间
+     10 	long 	BORNHOST 	消息产生的ip + port
+     11 	long 	STORETIMESTAMP 	消息存储时间
+     12 	long 	STOREHOSTADDRESS 	消息存储的ip + port
+     13 	long 	RECONSUMETIMES 	重新消费的次数
+     14 	long 	Prepared Transaction Offset 	事物相关偏移量
+     15 	int 	BODY Length 	消息体长度
+     ? 	    body 	消息体
+     16 	byte 	topic length 	topic长度
+     ？ 	    topic 	主题
+     17 	short 	PROPERTIES LENGTH 	属性长度
+     ？ 	    PROPERTIES 	属性
+ *
  * 默认路径 {user.home}/store/CommitLog/
  */
 public class CommitLog {
@@ -174,13 +197,7 @@ public class CommitLog {
         return this.mappedFileQueue.getFlushedWhere();
     }
 
-    /**
-     * 获取最后一个MappedFile写入位置
-     * @return
-     */
-    public long getMaxOffset() {
-        return this.mappedFileQueue.getMaxOffset();
-    }
+
 
     /**
      * 获取最后一个MappedFile wrote位置，到queue中记录的commit的位置之差
@@ -226,6 +243,8 @@ public class CommitLog {
 
 
     /************************  数据恢复star  ************************/
+
+
     /**
      * 正常退出时，数据恢复，所有内存数据都已刷新
      */
@@ -697,6 +716,12 @@ public class CommitLog {
         }
     }
 
+    /**
+     * 同步
+     * @param result
+     * @param putMessageResult
+     * @param messageExt
+     */
     public void handleHA(AppendMessageResult result, PutMessageResult putMessageResult, MessageExt messageExt) {
         if (BrokerRole.SYNC_MASTER == this.defaultMessageStore.getMessageStoreConfig().getBrokerRole()) {
             HAService service = this.defaultMessageStore.getHaService();
@@ -725,15 +750,20 @@ public class CommitLog {
     }
 
 
-
     /**
-     * According to receive certain message or offset storage time if an error occurs, it returns -1
+     * 获取消息commitLog文件队列中的消息存储时间
+     * @param offset  消息的物理偏移坐标
+     * @param size    消息大小
+     * @return
      */
     public long pickupStoreTimestamp(final long offset, final int size) {
+        //校验offset
         if (offset >= this.getMinOffset()) {
+            //返回消息结果
             SelectMappedBufferResult result = this.getMessage(offset, size);
             if (null != result) {
                 try {
+                    //获取消息的存储时间【MESSAGE_STORE_TIMESTAMP_POSTION表示存储时间的偏移】
                     return result.getByteBuffer().getLong(MessageDecoder.MESSAGE_STORE_TIMESTAMP_POSTION);
                 } finally {
                     result.release();
@@ -744,6 +774,27 @@ public class CommitLog {
         return -1;
     }
 
+    /**
+     * 获取消息commitLog文件队列中的消息数据
+     * @param offset  消息的物理偏移坐标
+     * @param size    消息大小
+     * @return
+     */
+    public SelectMappedBufferResult getMessage(final long offset, final int size) {
+        int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
+        MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, offset == 0);
+        if (mappedFile != null) {
+            int pos = (int) (offset % mappedFileSize);
+            return mappedFile.selectMappedBuffer(pos, size);
+        }
+        return null;
+    }
+
+
+    /**
+     * 获取commitLog文件队列中存储最小的偏移坐标【==第一个mappedFile文件初始偏移坐标】
+     * @return
+     */
     public long getMinOffset() {
         MappedFile mappedFile = this.mappedFileQueue.getFirstMappedFile();
         if (mappedFile != null) {
@@ -757,18 +808,8 @@ public class CommitLog {
         return -1;
     }
 
-    public SelectMappedBufferResult getMessage(final long offset, final int size) {
-        int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
-        MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset, offset == 0);
-        if (mappedFile != null) {
-            int pos = (int) (offset % mappedFileSize);
-            return mappedFile.selectMappedBuffer(pos, size);
-        }
-        return null;
-    }
-
     /**
-     * 获取offset 坐标对应mappedFile的下一个mappedFile其实物理坐标
+     * 获取offset所属mappedFile,后一个mappedFile文件初始偏移坐标
      * @param offset
      * @return
      */
@@ -776,6 +817,21 @@ public class CommitLog {
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
         return offset + mappedFileSize - offset % mappedFileSize;
     }
+
+
+    /**
+     * 获取commitLog文件队列中存储最最大的偏移坐标【==最后一个mappedFile文件初始偏移坐标+该文件已写入的坐标偏移】
+     * @return
+     */
+    public long getMaxOffset() {
+        return this.mappedFileQueue.getMaxOffset();
+    }
+
+
+
+
+
+
 
     public HashMap<String, Long> getTopicQueueTable() {
         return topicQueueTable;

@@ -73,8 +73,7 @@ public class MessageStoreConfig {
     private int cleanResourceInterval = 10000;
     // CommitLog removal interval
     private int deleteCommitLogFilesInterval = 100;
-    // ConsumeQueue removal interval
-    private int deleteConsumeQueueFilesInterval = 100;
+
     private int destroyMapedFileIntervalForcibly = 1000 * 120;
     private int redeleteHangedFileInterval = 1000 * 120;
     // When to delete,default is at 4 am
@@ -98,11 +97,17 @@ public class MessageStoreConfig {
     private int commitCommitLogLeastPages = 4;
     // Flush page size when the disk in warming state
     private int flushLeastPagesWhenWarmMapedFile = 1024 / 4 * 16;
-    // 刷新ConsumeQueue时要刷新多少页
-    private int flushConsumeQueueLeastPages = 2;
+
     private int flushCommitLogThoroughInterval = 1000 * 10;
     private int commitCommitLogThoroughInterval = 200;
+
+    // 刷新ConsumeQueue数据到磁盘条件页数【每页大小4K】只有大于这个偏移才会执行刷新
+    private int flushConsumeQueueLeastPages = 2;
+    // 刷新ConsumeQueue数据到磁盘服务每次执行间隔
     private int flushConsumeQueueThoroughInterval = 1000 * 60;
+    // 定时清理过期的ConsumeQueue服务每次执行间隔
+    private int deleteConsumeQueueFilesInterval = 100;
+
     @ImportantField
     private int maxTransferBytesOnMessageInMemory = 1024 * 256;
     @ImportantField

@@ -164,7 +164,7 @@ public class MappedFile extends ReferenceResource {
     }
 
 
-    /***********************    初始化函数 star       ***********************/
+    /***********************    初始化 star       ***********************/
     /**
      * 初始化MappedFile,使用transientStorePool
      */
@@ -232,9 +232,9 @@ public class MappedFile extends ReferenceResource {
             }
         }
     }
-    /***********************    初始化函数 end       ***********************/
+    /***********************    初始化 end       ***********************/
 
-    /***********************    追加消息函数实现 star       ***********************/
+    /***********************    追加数据 star       ***********************/
     /**
      * 追加消息
      *
@@ -383,7 +383,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * 是否可以刷盘
      *
-     * @param flushLeastPages
+     * @param flushLeastPages  flushLeastPages > 0 只有write-flush > flushLeastPages * 4K 才会刷盘
      * @return
      */
     private boolean isAbleToFlush(final int flushLeastPages) {
@@ -403,7 +403,7 @@ public class MappedFile extends ReferenceResource {
 
 
     /**
-     * MappedFile使用transientStorePool追加消息时,
+     * MappedFile使用transientStorePool追加数据时,
      * 需要调用执行commit将ByteBuffer字节缓冲区中的数据写入fileChannel
      * @param commitLeastPages
      * @return
@@ -434,10 +434,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 将writeBuffer中[lastCommittedPosition,writePos)的部分 写入fileChannel
-     * 更新committedPosition
-     * 参数 commitLeastPages 没用
-     *
+     * 将ByteBuffer字节缓冲区中的数据写入fileChannel
      * @param commitLeastPages
      */
     protected void commit0(final int commitLeastPages) {
@@ -482,14 +479,15 @@ public class MappedFile extends ReferenceResource {
 
         return write > flush;
     }
-    /***********************    追加消息函数 end       ***********************/
+    /***********************    追加数据 end       ***********************/
 
 
+
+    /***********************    选择获取MappedFile数据 star   ***********************/
     /**
-     * 返回从pos到 pos + size的内存映射
-     *
-     * @param pos
-     * @param size
+     * 读取mappedFile文件 pos物理偏移坐标开始, size长度字节数据
+     * @param pos   mappedFile文件数据初始偏移坐标
+     * @param size  长度
      * @return
      */
     public SelectMappedBufferResult selectMappedBuffer(int pos, int size) {
@@ -516,8 +514,8 @@ public class MappedFile extends ReferenceResource {
 
     /**
      *
-     * 读取文件MappedFile对应字节缓冲区pos偏移坐标开始的字节数据
-     * @param pos
+     * 读取mappedFile文件 pos物理偏移坐标开始所有字节数据
+     * @param pos   mappedFile文件数据初始偏移坐标
      * @return
      */
     public SelectMappedBufferResult selectMappedBuffer(int pos) {
@@ -536,26 +534,18 @@ public class MappedFile extends ReferenceResource {
         return null;
     }
 
-    @Override
-    public boolean cleanup(final long currentRef) {
-        if (this.isAvailable()) {
-            log.error("this file[REF:" + currentRef + "] " + this.fileName
-                    + " have not shutdown, stop unmapping.");
-            return false;
-        }
 
-        if (this.isCleanupOver()) {
-            log.error("this file[REF:" + currentRef + "] " + this.fileName
-                    + " have cleanup, do not do it again.");
-            return true;
-        }
-
-        clean(this.mappedByteBuffer);
-        TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(this.fileSize * (-1));
-        TOTAL_MAPPED_FILES.decrementAndGet();
-        log.info("unmap file[REF:" + currentRef + "] " + this.fileName + " OK");
-        return true;
+    /**
+     * 获取文件内存映射
+     * @return
+     */
+    public ByteBuffer sliceByteBuffer() {
+        return this.mappedByteBuffer.slice();
     }
+    /***********************    选择获取MappedFile数据 end   ***********************/
+
+
+
 
 
     public void warmMappedFile(FlushDiskType type, int pages) {
@@ -598,8 +588,33 @@ public class MappedFile extends ReferenceResource {
     }
 
 
-    public ByteBuffer sliceByteBuffer() {
-        return this.mappedByteBuffer.slice();
+
+
+
+    /***********************    清理 star   ***********************/
+    /**
+     * 清理mappedFile
+     * @return
+     */
+    @Override
+    public boolean cleanup(final long currentRef) {
+        if (this.isAvailable()) {
+            log.error("this file[REF:" + currentRef + "] " + this.fileName
+                    + " have not shutdown, stop unmapping.");
+            return false;
+        }
+
+        if (this.isCleanupOver()) {
+            log.error("this file[REF:" + currentRef + "] " + this.fileName
+                    + " have cleanup, do not do it again.");
+            return true;
+        }
+
+        clean(this.mappedByteBuffer);
+        TOTAL_MAPPED_VIRTUAL_MEMORY.addAndGet(this.fileSize * (-1));
+        TOTAL_MAPPED_FILES.decrementAndGet();
+        log.info("unmap file[REF:" + currentRef + "] " + this.fileName + " OK");
+        return true;
     }
 
 
@@ -687,6 +702,10 @@ public class MappedFile extends ReferenceResource {
 
         return false;
     }
+    /***********************    清理 end   ***********************/
+
+
+
 
     public int getWrotePosition() {
         return wrotePosition.get();
