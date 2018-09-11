@@ -1354,42 +1354,7 @@ public class DefaultMessageStore implements MessageStore {
         return file.exists();
     }
 
-    private boolean loadConsumeQueue() {
-        File dirLogic = new File(StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()));
-        File[] fileTopicList = dirLogic.listFiles();
-        if (fileTopicList != null) {
 
-            for (File fileTopic : fileTopicList) {
-                String topic = fileTopic.getName();
-
-                File[] fileQueueIdList = fileTopic.listFiles();
-                if (fileQueueIdList != null) {
-                    for (File fileQueueId : fileQueueIdList) {
-                        int queueId;
-                        try {
-                            queueId = Integer.parseInt(fileQueueId.getName());
-                        } catch (NumberFormatException e) {
-                            continue;
-                        }
-                        ConsumeQueue logic = new ConsumeQueue(
-                                topic,
-                                queueId,
-                                StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()),
-                                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),
-                                this);
-                        this.putConsumeQueue(topic, queueId, logic);
-                        if (!logic.load()) {
-                            return false;
-                        }
-                    }
-                }
-            }
-        }
-
-        log.info("load logics queue all over, OK");
-
-        return true;
-    }
 
 
     public void doDispatch(DispatchRequest req) {
@@ -1431,7 +1396,6 @@ public class DefaultMessageStore implements MessageStore {
 
     /**
      * 获取ConsumeQueue
-     *
      * @param topic   Topic.
      * @param queueId Queue ID.
      * @return
@@ -1448,7 +1412,6 @@ public class DefaultMessageStore implements MessageStore {
 
     /**
      * 添加ConsumeQueue
-     *
      * @param topic
      * @param queueId
      * @param consumeQueue
@@ -1462,6 +1425,48 @@ public class DefaultMessageStore implements MessageStore {
         } else {
             map.put(queueId, consumeQueue);
         }
+    }
+
+
+    /**
+     * 加载硬盘中文件添加到内存中
+     * @return
+     */
+    private boolean loadConsumeQueue() {
+        File dirLogic = new File(StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()));
+        File[] fileTopicList = dirLogic.listFiles();
+        if (fileTopicList != null) {
+
+            for (File fileTopic : fileTopicList) {
+                String topic = fileTopic.getName();
+
+                File[] fileQueueIdList = fileTopic.listFiles();
+                if (fileQueueIdList != null) {
+                    for (File fileQueueId : fileQueueIdList) {
+                        int queueId;
+                        try {
+                            queueId = Integer.parseInt(fileQueueId.getName());
+                        } catch (NumberFormatException e) {
+                            continue;
+                        }
+                        ConsumeQueue logic = new ConsumeQueue(
+                                topic,
+                                queueId,
+                                StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()),
+                                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),
+                                this);
+                        this.putConsumeQueue(topic, queueId, logic);
+                        if (!logic.load()) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+
+        log.info("load logics queue all over, OK");
+
+        return true;
     }
 
 
