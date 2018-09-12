@@ -71,18 +71,11 @@ public class MessageStoreConfig {
     private int flushIntervalConsumeQueue = 1000;
     // Resource reclaim interval
     private int cleanResourceInterval = 10000;
-    // CommitLog removal interval
-    private int deleteCommitLogFilesInterval = 100;
 
-    private int destroyMapedFileIntervalForcibly = 1000 * 120;
-    private int redeleteHangedFileInterval = 1000 * 120;
-    // When to delete,default is at 4 am
-    @ImportantField
-    private String deleteWhen = "04";
     private int diskMaxUsedSpaceRatio = 75;
-    // The number of hours to keep a log file before deleting it (in hours)
-    @ImportantField
-    private int fileReservedTime = 72;
+
+
+
     // Flow control for ConsumeQueue
     private int putMsgIndexHightWater = 600000;
     // 单个消息存储在文件中的最大大小，默认为512K
@@ -101,12 +94,33 @@ public class MessageStoreConfig {
     private int flushCommitLogThoroughInterval = 1000 * 10;
     private int commitCommitLogThoroughInterval = 200;
 
+
+    /************* 定时清理过期的CommitLog队列文件star  *************/
+    // 何时触发删除Commitlog文件, 默认凌晨4点删除文件
+    @ImportantField
+    private String deleteWhen = "04";
+    //在删除日志文件之前保留日志文件的小时数（以小时为单位）
+    @ImportantField
+    private int fileReservedTime = 72;
+    //删除多个CommitLog文件时，每删除一个文件间隔时间（单位毫秒）
+    private int deleteCommitLogFilesInterval = 100;
+    //强制删除文件间隔时间（单位毫秒）
+    private int destroyMapedFileIntervalForcibly = 1000 * 120;
+    // 删除commitlog队列第一个文件【依据执行时间间隔大于阀值】
+    private int redeleteHangedFileInterval = 1000 * 120;
+    /************* 定时清理过期的CommitLog队列文件end  *************/
+
+    /*********** CommitLog消息数据同步到ConsumeQueue文件队列中star  *************/
     // 刷新ConsumeQueue数据到磁盘条件页数【每页大小4K】只有大于这个偏移才会执行刷新
     private int flushConsumeQueueLeastPages = 2;
     // 刷新ConsumeQueue数据到磁盘服务每次执行间隔
     private int flushConsumeQueueThoroughInterval = 1000 * 60;
+    /*********** CommitLog消息数据同步到ConsumeQueue文件队列中end  *************/
+
+    /*********** 定时清理过期的ConsumeQueue队列文件服务star  *************/
     // 定时清理过期的ConsumeQueue服务每次执行间隔
     private int deleteConsumeQueueFilesInterval = 100;
+    /*********** 定时清理过期的ConsumeQueue队列文件服务end  *************/
 
     @ImportantField
     private int maxTransferBytesOnMessageInMemory = 1024 * 256;
@@ -151,8 +165,7 @@ public class MessageStoreConfig {
     private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m 1h 2h";
     private long flushDelayOffsetInterval = 1000 * 10;
     /**
-     * 磁盘满、且无过期文件情况下 TRUE 表示强制删除文件，优先保证服务可用; FALSE 标记服务不可用，文件不删除
-     *
+     * 是否开启立刻强制清理过期文件
      */
     @ImportantField
     private boolean cleanFileForciblyEnable = true;

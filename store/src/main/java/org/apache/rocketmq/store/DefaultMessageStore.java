@@ -708,24 +708,9 @@ public class DefaultMessageStore implements MessageStore {
         return getResult;
     }
 
-    public long getMaxOffsetInQueue(String topic, int queueId) {
-        ConsumeQueue logic = this.findConsumeQueue(topic, queueId);
-        if (logic != null) {
-            long offset = logic.getMaxOffsetInQueue();
-            return offset;
-        }
 
-        return 0;
-    }
 
-    public long getMinOffsetInQueue(String topic, int queueId) {
-        ConsumeQueue logic = this.findConsumeQueue(topic, queueId);
-        if (logic != null) {
-            return logic.getMinOffsetInQueue();
-        }
 
-        return -1;
-    }
 
     @Override
     public long getCommitLogOffsetInQueue(String topic, int queueId, long consumeQueueOffset) {
@@ -741,7 +726,6 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
         }
-
         return 0;
     }
 
@@ -1118,16 +1102,27 @@ public class DefaultMessageStore implements MessageStore {
         return messageIds;
     }
 
+    /**
+     * 获取topic-queueId 坐标所索引对应的第一条消息数据物理偏移坐标
+     * 检查校验某个物理偏移开始数据是否能从磁盘独处全部写入内存（监测机器内存是否够填充磁盘数据）
+     * @param topic         topic.
+     * @param queueId       queue ID.
+     * @param consumeOffset consume queue offset.  consume
+     * @return
+     */
     @Override
     public boolean checkInDiskByConsumeOffset(final String topic, final int queueId, long consumeOffset) {
-
+        //获取commitLog文件队列中存储最最大的偏移坐标
         final long maxOffsetPy = this.commitLog.getMaxOffset();
-
+        //从consumeQueueTable查找topic queueId 对应ConsumeQueue
         ConsumeQueue consumeQueue = findConsumeQueue(topic, queueId);
         if (consumeQueue != null) {
+            //获取索引坐标为startIndex的消息所在mappedFile的字节缓冲区分片ByteBuffer其中pos=startIndex * CQ_STORE_UNIT_SIZE% mappedFileSize
             SelectMappedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(consumeOffset);
             if (bufferConsumeQueue != null) {
                 try {
+                    //读取物理偏移坐标检测
+                    //检查校验某个物理偏移坐标开始读取之后所有数据开始数据是否能从磁盘独处全部写入内存
                     for (int i = 0; i < bufferConsumeQueue.getSize(); ) {
                         i += ConsumeQueue.CQ_STORE_UNIT_SIZE;
                         long offsetPy = bufferConsumeQueue.getByteBuffer().getLong();
@@ -1144,6 +1139,21 @@ public class DefaultMessageStore implements MessageStore {
         return false;
     }
 
+    /**
+     * 检查校验某个物理偏移坐标开始读取之后所有数据开始数据是否能从磁盘独处全部写入内存
+     * @param offsetPy
+     * @param maxOffsetPy
+     * @return
+     */
+    private boolean checkInDiskByCommitOffset(long offsetPy, long maxOffsetPy) {
+        long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
+        return (maxOffsetPy - offsetPy) > memory;
+    }
+
+    /**
+     * 获取消息没有同步ConsumeQueue Index偏移量
+     * @return
+     */
     public long dispatchBehindBytes() {
         return this.reputMessageService.behind();
     }
@@ -1184,45 +1194,6 @@ public class DefaultMessageStore implements MessageStore {
         return null;
     }
 
-    /**
-     * 从consumeQueueTable查找topic queueId 对应ConsumeQueue，不存在则创建一个ConsumeQueue，
-     * 添加到consumeQueueTable
-     *
-     * @param topic
-     * @param queueId
-     * @return
-     */
-    public ConsumeQueue findConsumeQueue(String topic, int queueId) {
-        ConcurrentMap<Integer, ConsumeQueue> map = consumeQueueTable.get(topic);
-        if (null == map) {
-            ConcurrentMap<Integer, ConsumeQueue> newMap = new ConcurrentHashMap<Integer, ConsumeQueue>(128);
-            ConcurrentMap<Integer, ConsumeQueue> oldMap = consumeQueueTable.putIfAbsent(topic, newMap);
-            if (oldMap != null) {
-                map = oldMap;
-            } else {
-                map = newMap;
-            }
-        }
-
-        ConsumeQueue logic = map.get(queueId);
-        if (null == logic) {
-            ConsumeQueue newLogic = new ConsumeQueue(
-                    topic,
-                    queueId,
-                    StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()),
-                    this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),
-                    this);
-            ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
-            if (oldLogic != null) {
-                logic = oldLogic;
-            } else {
-                logic = newLogic;
-            }
-        }
-
-        return logic;
-    }
-
     private long nextOffsetCorrection(long oldOffset, long newOffset) {
         long nextOffset = oldOffset;
         if (this.getMessageStoreConfig().getBrokerRole() != BrokerRole.SLAVE || this.getMessageStoreConfig().isOffsetCheckInSlave()) {
@@ -1231,10 +1202,7 @@ public class DefaultMessageStore implements MessageStore {
         return nextOffset;
     }
 
-    private boolean checkInDiskByCommitOffset(long offsetPy, long maxOffsetPy) {
-        long memory = (long) (StoreUtil.TOTAL_PHYSICAL_MEMORY_SIZE * (this.messageStoreConfig.getAccessMessageInMemoryMaxRatio() / 100.0));
-        return (maxOffsetPy - offsetPy) > memory;
-    }
+
 
     private boolean isTheBatchFull(int sizePy, int maxMsgNums, int bufferTotal, int messageTotal, boolean isInDisk) {
 
@@ -1267,6 +1235,10 @@ public class DefaultMessageStore implements MessageStore {
         return false;
     }
 
+    /**
+     * 删除文件
+     * @param fileName
+     */
     private void deleteFile(final String fileName) {
         File file = new File(fileName);
         boolean result = file.delete();
@@ -1274,6 +1246,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
+     * 创建abort跟目录文件
      * @throws IOException
      */
     private void createTempFile() throws IOException {
@@ -1284,8 +1257,12 @@ public class DefaultMessageStore implements MessageStore {
         log.info(fileName + (result ? " create OK" : " already exists"));
     }
 
+    /**
+     * 添加定时任务
+     * */
     private void addScheduleTask() {
 
+        //定时清理过期文件
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1293,6 +1270,7 @@ public class DefaultMessageStore implements MessageStore {
             }
         }, 1000 * 60, this.messageStoreConfig.getCleanResourceInterval(), TimeUnit.MILLISECONDS);
 
+        //监测所有ConsumeQueue，consumeQueueExt文件队列中文件大小
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1300,6 +1278,7 @@ public class DefaultMessageStore implements MessageStore {
             }
         }, 1, 10, TimeUnit.MINUTES);
 
+        //开启打印线程堆栈
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
@@ -1329,11 +1308,17 @@ public class DefaultMessageStore implements MessageStore {
         // }, 1, 1, TimeUnit.HOURS);
     }
 
+    /**
+     * 清理过期文件
+     */
     private void cleanFilesPeriodically() {
         this.cleanCommitLogService.run();
         this.cleanConsumeQueueService.run();
     }
 
+    /**
+     * 监测所有ConsumeQueue，consumeQueueExt文件队列中文件大小
+     */
     private void checkSelf() {
         this.commitLog.checkSelf();
 
@@ -1348,13 +1333,15 @@ public class DefaultMessageStore implements MessageStore {
         }
     }
 
+    /**
+     * 判断mq  abort 目录是否存在
+     * @return
+     */
     private boolean isTempFileExist() {
         String fileName = StorePathConfigHelper.getAbortFile(this.messageStoreConfig.getStorePathRootDir());
         File file = new File(fileName);
         return file.exists();
     }
-
-
 
 
     public void doDispatch(DispatchRequest req) {
@@ -1429,6 +1416,46 @@ public class DefaultMessageStore implements MessageStore {
 
 
     /**
+     * 从consumeQueueTable查找topic queueId 对应ConsumeQueue，不存在则创建一个ConsumeQueue，
+     * 添加到consumeQueueTable
+     *
+     * @param topic
+     * @param queueId
+     * @return
+     */
+    public ConsumeQueue findConsumeQueue(String topic, int queueId) {
+        ConcurrentMap<Integer, ConsumeQueue> map = consumeQueueTable.get(topic);
+        if (null == map) {
+            ConcurrentMap<Integer, ConsumeQueue> newMap = new ConcurrentHashMap<Integer, ConsumeQueue>(128);
+            ConcurrentMap<Integer, ConsumeQueue> oldMap = consumeQueueTable.putIfAbsent(topic, newMap);
+            if (oldMap != null) {
+                map = oldMap;
+            } else {
+                map = newMap;
+            }
+        }
+
+        ConsumeQueue logic = map.get(queueId);
+        if (null == logic) {
+            ConsumeQueue newLogic = new ConsumeQueue(
+                    topic,
+                    queueId,
+                    StorePathConfigHelper.getStorePathConsumeQueue(this.messageStoreConfig.getStorePathRootDir()),
+                    this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),
+                    this);
+            ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
+            if (oldLogic != null) {
+                logic = oldLogic;
+            } else {
+                logic = newLogic;
+            }
+        }
+
+        return logic;
+    }
+
+
+    /**
      * 加载硬盘中文件添加到内存中
      * @return
      */
@@ -1467,6 +1494,38 @@ public class DefaultMessageStore implements MessageStore {
         log.info("load logics queue all over, OK");
 
         return true;
+    }
+
+
+    /**
+     * 获取ConsumeQueue写入消息最大索引坐标
+     * @param topic   Topic name.
+     * @param queueId Queue ID.
+     * @return
+     */
+    public long getMaxOffsetInQueue(String topic, int queueId) {
+        ConsumeQueue logic = this.findConsumeQueue(topic, queueId);
+        if (logic != null) {
+            long offset = logic.getMaxOffsetInQueue();
+            return offset;
+        }
+
+        return 0;
+    }
+
+    /**
+     * 获取consumeQueue 最小偏移的索引
+     * @param topic   Topic name.
+     * @param queueId Queue ID.
+     * @return
+     */
+    public long getMinOffsetInQueue(String topic, int queueId) {
+        ConsumeQueue logic = this.findConsumeQueue(topic, queueId);
+        if (logic != null) {
+            return logic.getMinOffsetInQueue();
+        }
+
+        return -1;
     }
 
 
@@ -1588,11 +1647,20 @@ public class DefaultMessageStore implements MessageStore {
     class CleanCommitLogService {
 
         private final static int MAX_MANUAL_DELETE_FILE_TIMES = 20;
+
+        /**
+         * 检查磁盘是否达到了需要清理的阀值
+         */
         private final double diskSpaceWarningLevelRatio =
                 Double.parseDouble(System.getProperty("rocketmq.broker.diskSpaceWarningLevelRatio", "0.90"));
 
+        /**
+         * 检查磁盘是否达到了需要清理的阀值
+         */
         private final double diskSpaceCleanForciblyRatio =
                 Double.parseDouble(System.getProperty("rocketmq.broker.diskSpaceCleanForciblyRatio", "0.85"));
+
+
         private long lastRedeleteTimestamp = 0;
 
         private volatile int manualDeleteFileSeveralTimes = 0;
@@ -1614,21 +1682,33 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        /**
+         * 删除过期的commitlog文件【根据文件过期时间是否超过阀值】
+         */
         private void deleteExpiredFiles() {
+            //清理文件数量
             int deleteCount = 0;
+            //在删除日志文件之前保留日志文件的小时数（以小时为单位）
             long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime();
+            //删除多个CommitLog文件的间隔时间（单位毫秒）
             int deletePhysicFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteCommitLogFilesInterval();
+            //强制删除文件间隔时间（单位毫秒）
             int destroyMapedFileIntervalForcibly = DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
 
+            //是否达到定时清理的时间
             boolean timeup = this.isTimeToDelete();
+            //检查磁盘是否达到了需要清理的阀值
             boolean spacefull = this.isSpaceToDelete();
+            //是手动触发删除
             boolean manualDelete = this.manualDeleteFileSeveralTimes > 0;
 
+            //是否满足清理条件
             if (timeup || spacefull || manualDelete) {
 
                 if (manualDelete)
                     this.manualDeleteFileSeveralTimes--;
 
+                //是否开启立刻强制清理文件
                 boolean cleanAtOnce = DefaultMessageStore.this.getMessageStoreConfig().isCleanFileForciblyEnable() && this.cleanImmediately;
 
                 log.info("begin to delete before {} hours file. timeup: {} spacefull: {} manualDeleteFileSeveralTimes: {} cleanAtOnce: {}",
@@ -1638,8 +1718,9 @@ public class DefaultMessageStore implements MessageStore {
                         manualDeleteFileSeveralTimes,
                         cleanAtOnce);
 
+                //换算小时对应的超时时间转化为毫秒
                 fileReservedTime *= 60 * 60 * 1000;
-
+                //删除过期文件,返回删除文件的数量
                 deleteCount = DefaultMessageStore.this.commitLog.deleteExpiredFile(fileReservedTime, deletePhysicFilesInterval,
                         destroyMapedFileIntervalForcibly, cleanAtOnce);
                 if (deleteCount > 0) {
@@ -1649,11 +1730,15 @@ public class DefaultMessageStore implements MessageStore {
             }
         }
 
+        /**
+         * 删除commitlog队列第一个文件【依据执行时间间隔大于阀值】
+         */
         private void redeleteHangedFile() {
             int interval = DefaultMessageStore.this.getMessageStoreConfig().getRedeleteHangedFileInterval();
             long currentTimestamp = System.currentTimeMillis();
             if ((currentTimestamp - this.lastRedeleteTimestamp) > interval) {
                 this.lastRedeleteTimestamp = currentTimestamp;
+                //强制删除文件间隔时间（单位毫秒）
                 int destroyMapedFileIntervalForcibly =
                         DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
                 if (DefaultMessageStore.this.commitLog.retryDeleteFirstFile(destroyMapedFileIntervalForcibly)) {
@@ -1665,6 +1750,10 @@ public class DefaultMessageStore implements MessageStore {
             return CleanCommitLogService.class.getSimpleName();
         }
 
+        /**
+         * 清理条件之一：是否达到定时清理的时间
+         * @return
+         */
         private boolean isTimeToDelete() {
             String when = DefaultMessageStore.this.getMessageStoreConfig().getDeleteWhen();
             if (UtilAll.isItTimeToDo(when)) {
@@ -1675,22 +1764,34 @@ public class DefaultMessageStore implements MessageStore {
             return false;
         }
 
+        /**
+         * 清理条件之一：检查磁盘是否达到了需要清理的阀值
+         * @return
+         */
         private boolean isSpaceToDelete() {
             double ratio = DefaultMessageStore.this.getMessageStoreConfig().getDiskMaxUsedSpaceRatio() / 100.0;
-
+            //标记是否需要清理
             cleanImmediately = false;
 
+            /**
+             * CommitLog 文件是否达到预警清理指标
+             */
             {
+                //获取commitLog存储路径
                 String storePathPhysic = DefaultMessageStore.this.getMessageStoreConfig().getStorePathCommitLog();
+                //获取commitLog存储路径磁盘已用空间占比 usedSpace / (double) totalSpace
                 double physicRatio = UtilAll.getDiskPartitionSpaceUsedPercent(storePathPhysic);
+                //当已用空间占比大于diskSpaceWarningLevelRatio 默认（90%） 设置flagBits 状态加上DISK_FULL_BIT
                 if (physicRatio > diskSpaceWarningLevelRatio) {
                     boolean diskok = DefaultMessageStore.this.runningFlags.getAndMakeDiskFull();
                     if (diskok) {
                         DefaultMessageStore.log.error("physic disk maybe full soon " + physicRatio + ", so mark disk full");
                     }
-
+                    //更新cleanImmediately
                     cleanImmediately = true;
+                //当已用空间占比大于diskSpaceCleanForciblyRatio 默认85%
                 } else if (physicRatio > diskSpaceCleanForciblyRatio) {
+                    //更新cleanImmediately
                     cleanImmediately = true;
                 } else {
                     boolean diskok = DefaultMessageStore.this.runningFlags.getAndMakeDiskOK();
@@ -1698,25 +1799,33 @@ public class DefaultMessageStore implements MessageStore {
                         DefaultMessageStore.log.info("physic disk space OK " + physicRatio + ", so mark disk ok");
                     }
                 }
-
+                //当已用已用完直接返回立刻开始清理
                 if (physicRatio < 0 || physicRatio > ratio) {
                     DefaultMessageStore.log.info("physic disk maybe full soon, so reclaim space, " + physicRatio);
                     return true;
                 }
             }
 
+            /**
+             * ConsumeQueue 文件是否达到预警清理指标
+             */
             {
+                //获取ConsumeQueue存储路径
                 String storePathLogics = StorePathConfigHelper
                         .getStorePathConsumeQueue(DefaultMessageStore.this.getMessageStoreConfig().getStorePathRootDir());
+                //获取ConsumeQueue存储路径磁盘已用空间占比 usedSpace / (double) totalSpace
                 double logicsRatio = UtilAll.getDiskPartitionSpaceUsedPercent(storePathLogics);
+                //当已用空间占比大于diskSpaceWarningLevelRatio 默认（90%） 设置flagBits 状态加上DISK_FULL_BIT
                 if (logicsRatio > diskSpaceWarningLevelRatio) {
                     boolean diskok = DefaultMessageStore.this.runningFlags.getAndMakeDiskFull();
                     if (diskok) {
                         DefaultMessageStore.log.error("logics disk maybe full soon " + logicsRatio + ", so mark disk full");
                     }
-
+                    //更新cleanImmediately
                     cleanImmediately = true;
+                //当已用空间占比大于diskSpaceCleanForciblyRatio 默认85%
                 } else if (logicsRatio > diskSpaceCleanForciblyRatio) {
+                    //更新cleanImmediately
                     cleanImmediately = true;
                 } else {
                     boolean diskok = DefaultMessageStore.this.runningFlags.getAndMakeDiskOK();
@@ -1724,7 +1833,7 @@ public class DefaultMessageStore implements MessageStore {
                         DefaultMessageStore.log.info("logics disk space OK " + logicsRatio + ", so mark disk ok");
                     }
                 }
-
+                //当已用已用完直接返回立刻开始清理
                 if (logicsRatio < 0 || logicsRatio > ratio) {
                     DefaultMessageStore.log.info("logics disk maybe full soon, so reclaim space, " + logicsRatio);
                     return true;

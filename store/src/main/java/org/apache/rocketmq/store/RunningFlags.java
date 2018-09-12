@@ -131,12 +131,24 @@ public class RunningFlags {
         return false;
     }
 
+    /**
+     * 判断状态是非DISK_FULL_BIT状态
+     * 0|0=0；  0|1=1；  1|0=1；   1|1=1
+     * 设置flagBits 状态加上DISK_FULL_BIT
+     * @return
+     */
     public boolean getAndMakeDiskFull() {
         boolean result = !((this.flagBits & DISK_FULL_BIT) == DISK_FULL_BIT);
         this.flagBits |= DISK_FULL_BIT;
         return result;
     }
 
+    /**
+     * 判断状态是非DISK_FULL_BIT状态
+     * 0&0=0;  0&1=0;   1&0=0;    1&1=1;
+     * 设置flagBits 状态去掉DISK_FULL_BIT
+     * @return
+     */
     public boolean getAndMakeDiskOK() {
         boolean result = !((this.flagBits & DISK_FULL_BIT) == DISK_FULL_BIT);
         this.flagBits &= ~DISK_FULL_BIT;

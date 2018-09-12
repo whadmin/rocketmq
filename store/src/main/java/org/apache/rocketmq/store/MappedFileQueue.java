@@ -304,19 +304,25 @@ public class MappedFileQueue {
                                        final int deleteFilesInterval,
                                        final long intervalForcibly,
                                        final boolean cleanImmediately) {
+        //获取所有MappedFile
         Object[] mfs = this.copyMappedFiles(0);
 
         if (null == mfs)
             return 0;
 
         int mfsLength = mfs.length - 1;
+        //记录删除文件的数量
         int deleteCount = 0;
+        //记录删除文件
         List<MappedFile> files = new ArrayList<MappedFile>();
         if (null != mfs) {
             for (int i = 0; i < mfsLength; i++) {
                 MappedFile mappedFile = (MappedFile) mfs[i];
+                //计算判断超时时间
                 long liveMaxTimestamp = mappedFile.getLastModifiedTimestamp() + expiredTime;
+                //满足过期时间判断删除mappedFile
                 if (System.currentTimeMillis() >= liveMaxTimestamp || cleanImmediately) {
+                    //删除mappedFile物理文件
                     if (mappedFile.destroy(intervalForcibly)) {
                         files.add(mappedFile);
                         deleteCount++;
@@ -324,7 +330,7 @@ public class MappedFileQueue {
                         if (files.size() >= DELETE_FILES_BATCH_MAX) {
                             break;
                         }
-
+                        //每删除一个文件的时间间隔
                         if (deleteFilesInterval > 0 && (i + 1) < mfsLength) {
                             try {
                                 Thread.sleep(deleteFilesInterval);

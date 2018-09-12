@@ -1833,11 +1833,11 @@ public class CommitLog {
 
 
     /**
-     * 根据expiredTime删除过期文件,返回删除文件的数量
-     * @param expiredTime
-     * @param deleteFilesInterval
-     * @param intervalForcibly
-     * @param cleanImmediately
+     * 删除过期文件,返回删除文件的数量
+     * @param expiredTime      过期时间时间 如果文件最后修改时间+expiredTime < 当前时间则删除该文件
+     * @param deleteFilesInterval    删除多个MappedFile文件的间隔时间
+     * @param intervalForcibly       强制删除个MappedFile文件的间隔时间
+     * @param cleanImmediately       是否需要强制删除
      * @return
      */
     public int deleteExpiredFile(
