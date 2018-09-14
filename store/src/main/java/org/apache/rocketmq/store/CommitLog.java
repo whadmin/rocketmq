@@ -108,7 +108,7 @@ public class CommitLog {
 
 
     /**
-     * 记录每一个ConsumeQueue 逻辑编译
+     * 记录消息数据在 topic-queueid中的索引坐标（每添加一个累加+1）
      */
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
 
@@ -859,7 +859,7 @@ public class CommitLog {
 
 
     /**
-     * 删除topic+queueId对应逻辑队列中位置
+     * 删除topic-queueid中的索引坐标
      * @param topic
      * @param queueId
      */
@@ -1850,7 +1850,7 @@ public class CommitLog {
     }
 
     /**
-     * 将offset以后的MappedFile都清除掉
+     * 都清除掉offset偏移坐标之后的MappedFile,并重置offset偏移坐标MappedFile
      * @param offset
      * @return
      */
