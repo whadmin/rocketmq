@@ -34,16 +34,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class IndexService {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
     /**
-     * Maximum times to attempt index file creation.
+     * 尝试创建IndexFile，最多3次
      */
     private static final int MAX_TRY_IDX_CREATE = 3;
+    /**
+     * defaultMessageStore
+     */
     private final DefaultMessageStore defaultMessageStore;
+    /**
+     * 每个索引文件的槽数，默认500w
+     */
     private final int hashSlotNum;
+    /**
+     * 索引文件最多记录的索引个数,默认2千万
+     */
     private final int indexNum;
+    /**
+     * 索引文件存储路径
+     */
     private final String storePath;
+    /**
+     * 索引文件列表
+     */
     private final ArrayList<IndexFile> indexFileList = new ArrayList<IndexFile>();
+    /**
+     * 同步锁
+     */
     private final ReadWriteLock readWriteLock = new ReentrantReadWriteLock();
 
     public IndexService(final DefaultMessageStore store) {
@@ -54,6 +74,13 @@ public class IndexService {
             StorePathConfigHelper.getStorePathIndex(store.getMessageStoreConfig().getStorePathRootDir());
     }
 
+    /**
+     * 加载IndexService
+     * 查询遍历索引文件存储路径所有物理文件，每个文件创建对应的IndexFile，添加到indexFileList中
+     * 根据lastExitOK判断是否要destroy 脏文件 如:文件更新时间超过 Checkpoint 记录最后一次写入index记录时间
+     * @param lastExitOK
+     * @return
+     */
     public boolean load(final boolean lastExitOK) {
         File dir = new File(this.storePath);
         File[] files = dir.listFiles();
@@ -62,9 +89,11 @@ public class IndexService {
             Arrays.sort(files);
             for (File file : files) {
                 try {
+                    //查询遍历索引文件存储路径所有物理文件，每个文件创建对应的IndexFile
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
                     f.load();
 
+                    //根据lastExitOK判断是否要destroy 脏文件
                     if (!lastExitOK) {
                         if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()
                             .getIndexMsgTimestamp()) {
@@ -74,6 +103,7 @@ public class IndexService {
                     }
 
                     log.info("load index file OK, " + f.getFileName());
+                    //添加到indexFileList中
                     this.indexFileList.add(f);
                 } catch (IOException e) {
                     log.error("load file {} error", file, e);
@@ -87,6 +117,10 @@ public class IndexService {
         return true;
     }
 
+    /**
+     * 如果最新写入index消息物理偏移坐标小于offset，删除所有indexFile 索引文件
+     * @param offset
+     */
     public void deleteExpiredFile(long offset) {
         Object[] files = null;
         try {
@@ -94,7 +128,7 @@ public class IndexService {
             if (this.indexFileList.isEmpty()) {
                 return;
             }
-
+            //获取第一个索引文件中第一个，也是最新的indexFile最后写入消息的物理偏移坐标
             long endPhyOffset = this.indexFileList.get(0).getEndPhyOffset();
             if (endPhyOffset < offset) {
                 files = this.indexFileList.toArray();
@@ -120,6 +154,11 @@ public class IndexService {
         }
     }
 
+
+    /**
+     * 删除指定的索引文件
+     * @param files
+     */
     private void deleteExpiredFile(List<IndexFile> files) {
         if (!files.isEmpty()) {
             try {
@@ -140,6 +179,9 @@ public class IndexService {
         }
     }
 
+    /**
+     * 删除所有索引文件
+     */
     public void destroy() {
         try {
             this.readWriteLock.writeLock().lock();
@@ -154,14 +196,25 @@ public class IndexService {
         }
     }
 
+    /**
+     * 查询消息
+     * @param topic
+     * @param key
+     * @param maxNum  返回最大消息数量
+     * @param begin   消息开始时间
+     * @param end     消息的结束时间
+     * @return
+     */
     public QueryOffsetResult queryOffset(String topic, String key, int maxNum, long begin, long end) {
         List<Long> phyOffsets = new ArrayList<Long>(maxNum);
-
+        //最后一次更新索引数据时间
         long indexLastUpdateTimestamp = 0;
+        //最后一次更新索引消息物理偏移
         long indexLastUpdatePhyoffset = 0;
         maxNum = Math.min(maxNum, this.defaultMessageStore.getMessageStoreConfig().getMaxMsgsNumBatch());
         try {
             this.readWriteLock.readLock().lock();
+            //从indexFile文件列表最后一个文件依次遍历所有的indexFile
             if (!this.indexFileList.isEmpty()) {
                 for (int i = this.indexFileList.size(); i > 0; i--) {
                     IndexFile f = this.indexFileList.get(i - 1);
@@ -170,16 +223,16 @@ public class IndexService {
                         indexLastUpdateTimestamp = f.getEndTimestamp();
                         indexLastUpdatePhyoffset = f.getEndPhyOffset();
                     }
-
+                    //判断条件中的时间是否存在索引数据
                     if (f.isTimeMatched(begin, end)) {
-
+                        //通过key和时间为条件查询消息物理偏移列表
                         f.selectPhyOffset(phyOffsets, buildKey(topic, key), maxNum, begin, end, lastFile);
                     }
 
                     if (f.getBeginTimestamp() < begin) {
                         break;
                     }
-
+                    //达到需要消息上限不在获取
                     if (phyOffsets.size() >= maxNum) {
                         break;
                     }
@@ -198,6 +251,10 @@ public class IndexService {
         return topic + "#" + key;
     }
 
+    /**
+     * 通过调度请求构建消息对应的索引数据
+     * @param req
+     */
     public void buildIndex(DispatchRequest req) {
         IndexFile indexFile = retryGetAndCreateIndexFile();
         if (indexFile != null) {
@@ -261,7 +318,7 @@ public class IndexService {
     }
 
     /**
-     * Retries to get or create index file.
+     * 尝试三次，获取或者创建一个最新的可写的，IndexFile
      *
      * @return {@link IndexFile} or null on failure.
      */

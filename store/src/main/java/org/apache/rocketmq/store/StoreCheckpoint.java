@@ -44,7 +44,7 @@ public class StoreCheckpoint {
     private volatile long physicMsgTimestamp = 0;
     //ConsumeQueue 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
     private volatile long logicsMsgTimestamp = 0;
-    //index 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
+    //index 文件更新时间【写入字节缓冲区或刷写入磁盘都会更新】
     private volatile long indexMsgTimestamp = 0;
 
     public StoreCheckpoint(final String scpPath) throws IOException {

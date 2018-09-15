@@ -58,19 +58,19 @@ public class IndexHeader {
      */
     private final ByteBuffer byteBuffer;
     /**
-     * 开始时间
+     * 第一条消息构建索引时间
      */
     private AtomicLong beginTimestamp = new AtomicLong(0);
     /**
-     * 结束时间
+     * 最后一条消息构建索引时间
      */
     private AtomicLong endTimestamp = new AtomicLong(0);
     /**
-     * 开始物理偏移
+     * 第一条构建索引消息物理偏移坐标
      */
     private AtomicLong beginPhyOffset = new AtomicLong(0);
     /**
-     * 结束物理偏移
+     * 最后一条构建索引消息物理偏移坐标
      */
     private AtomicLong endPhyOffset = new AtomicLong(0);
 
