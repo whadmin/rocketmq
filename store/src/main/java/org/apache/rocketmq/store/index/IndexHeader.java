@@ -20,18 +20,58 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * 索引文件头信息
+ */
 public class IndexHeader {
+
+    /**
+     * 索引头信息总大小
+     */
     public static final int INDEX_HEADER_SIZE = 40;
+    /**
+     * 8位long类型，索引文件构建第一个索引的消息落在broker的时间
+     */
     private static int beginTimestampIndex = 0;
+    /**
+     * 8位long类型，索引文件构建最后一个索引消息落broker时间
+     */
     private static int endTimestampIndex = 8;
+    /**
+     * 8位long类型，索引文件构建第一个索引的消息commitLog偏移量
+     */
     private static int beginPhyoffsetIndex = 16;
+    /**
+     *  8位long类型，索引文件构建最后一个索引消息commitLog偏移量
+     */
     private static int endPhyoffsetIndex = 24;
+    /**
+     * 4位int类型，构建索引占用的槽位数(这个值貌似没有具体作用)
+     */
     private static int hashSlotcountIndex = 32;
+    /**
+     * 4位int类型，索引文件中构建的索引个数
+     */
     private static int indexCountIndex = 36;
+    /**
+     * 临时存储字节缓冲区
+     */
     private final ByteBuffer byteBuffer;
+    /**
+     * 开始时间
+     */
     private AtomicLong beginTimestamp = new AtomicLong(0);
+    /**
+     * 结束时间
+     */
     private AtomicLong endTimestamp = new AtomicLong(0);
+    /**
+     * 开始物理偏移
+     */
     private AtomicLong beginPhyOffset = new AtomicLong(0);
+    /**
+     * 结束物理偏移
+     */
     private AtomicLong endPhyOffset = new AtomicLong(0);
     private AtomicInteger hashSlotCount = new AtomicInteger(0);
 
@@ -41,6 +81,10 @@ public class IndexHeader {
         this.byteBuffer = byteBuffer;
     }
 
+
+    /**
+     * 读取byteBuffer的内容设置到IndexHeader
+     */
     public void load() {
         this.beginTimestamp.set(byteBuffer.getLong(beginTimestampIndex));
         this.endTimestamp.set(byteBuffer.getLong(endTimestampIndex));
@@ -55,6 +99,10 @@ public class IndexHeader {
         }
     }
 
+
+    /**
+     * 读取IndexHeader属性更新到byteBuffer
+     */
     public void updateByteBuffer() {
         this.byteBuffer.putLong(beginTimestampIndex, this.beginTimestamp.get());
         this.byteBuffer.putLong(endTimestampIndex, this.endTimestamp.get());

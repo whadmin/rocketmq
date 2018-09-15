@@ -698,17 +698,17 @@ public class ConsumeQueue {
 
     /*********************** 获取消息位置 star  ***********************/
     /**
-     * 获取索引坐标为startIndex的消息所在mappedFile的字节缓冲区分片ByteBuffer其中pos=startIndex * CQ_STORE_UNIT_SIZE% mappedFileSize
+     * 获取索引坐标为startIndex的消息所在mappedFile的字节缓冲区分片【pos=startIndex * CQ_STORE_UNIT_SIZE% mappedFileSize】
      *
      * @param startIndex startIndex表示消息在ConsumeQueue文件队列中消息排序
      * @return
      */
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
-        //存储在ConsumeQueue中队列消息长度固定，可以通过startIndex * CQ_STORE_UNIT_SIZE计算出消息偏移坐标
+        //存储在ConsumeQueue文件队列中，消息位置信息长度固定，可以通过startIndex * CQ_STORE_UNIT_SIZE计算出在consumequeue的偏移坐标
         long offset = startIndex * CQ_STORE_UNIT_SIZE;
         if (offset >= this.getMinLogicOffset()) {
-            //通过offset在MappedFileQueue找到所属mappedFile
+            //通过偏移坐标offset在MappedFileQueue找到所属mappedFile
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
             if (mappedFile != null) {
                 //读取文件MappedFile对应字节缓冲区pos偏移坐标开始的字节数据

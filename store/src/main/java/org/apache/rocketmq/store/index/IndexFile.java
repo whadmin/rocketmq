@@ -27,18 +27,63 @@ import org.apache.rocketmq.store.MappedFile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * IndexFile 记录了 SlotTable 以及 Index Linked List
+ *
+ * SlotTable
+ * 默认有500w个槽（可以理解为hash到这500w个槽中），每个槽占4个字节，也就是一个int值,这个int值范围是[1,2000w],2000w是默认的索引文件数量。
+ *
+ *
+ */
 public class IndexFile {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+    /**
+     * 每一个槽信息含4字节
+     */
     private static int hashSlotSize = 4;
+    /**
+     * 每一个索引信息占据20字节
+     */
     private static int indexSize = 20;
+    /**
+     * 第0个索引信息是invalid的
+     */
     private static int invalidIndex = 0;
+    /**
+     * hash槽的个数，默认500w
+     */
     private final int hashSlotNum;
+    /**
+     * 最多记录的索引条数 默认2千万
+     */
     private final int indexNum;
+    /**
+     * mappedFile
+     */
     private final MappedFile mappedFile;
+    /**
+     * 没有用到
+     */
     private final FileChannel fileChannel;
+    /**
+     * mappedByteBuffer
+     */
     private final MappedByteBuffer mappedByteBuffer;
+    /**
+     * 索引头
+     */
     private final IndexHeader indexHeader;
 
+
+    /**
+     * 创建一个IndexFile
+     * @param fileName  文件名
+     * @param hashSlotNum  hash槽的个数，默认5million
+     * @param indexNum     最多记录的索引条数,默认2千万
+     * @param endPhyOffset 开始物理偏移
+     * @param endTimestamp 开始的时间戳
+     * @throws IOException
+     */
     public IndexFile(final String fileName, final int hashSlotNum, final int indexNum,
         final long endPhyOffset, final long endTimestamp) throws IOException {
         int fileTotalSize =
@@ -52,39 +97,63 @@ public class IndexFile {
         ByteBuffer byteBuffer = this.mappedByteBuffer.slice();
         this.indexHeader = new IndexHeader(byteBuffer);
 
+        //设置物理偏移
         if (endPhyOffset > 0) {
             this.indexHeader.setBeginPhyOffset(endPhyOffset);
             this.indexHeader.setEndPhyOffset(endPhyOffset);
         }
 
+        //设置时间
         if (endTimestamp > 0) {
             this.indexHeader.setBeginTimestamp(endTimestamp);
             this.indexHeader.setEndTimestamp(endTimestamp);
         }
     }
 
+    /**
+     * 获取index文件名称
+     * @return
+     */
     public String getFileName() {
         return this.mappedFile.getFileName();
     }
 
+
+    /**
+     * 加载IndexHeader，读取取byteBuffer的内容到内存中
+     */
     public void load() {
         this.indexHeader.load();
     }
 
+    /**
+     * 刷盘将字节缓冲区的数据写入磁盘
+     */
     public void flush() {
         long beginTime = System.currentTimeMillis();
         if (this.mappedFile.hold()) {
+            //读取IndexHeader属性更新到byteBuffer
             this.indexHeader.updateByteBuffer();
+            //将字节缓冲区的数据写入磁盘
             this.mappedByteBuffer.force();
             this.mappedFile.release();
             log.info("flush index file eclipse time(ms) " + (System.currentTimeMillis() - beginTime));
         }
     }
 
+    /**
+     * IndexFile 写入的索引数据是否已经写满
+     * @return
+     */
     public boolean isWriteFull() {
         return this.indexHeader.getIndexCount() >= this.indexNum;
     }
 
+    /**
+     * 销毁IndexFile
+     * @param intervalForcibly
+     * @return
+     */
     public boolean destroy(final long intervalForcibly) {
         return this.mappedFile.destroy(intervalForcibly);
     }

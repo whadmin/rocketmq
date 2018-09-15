@@ -1094,33 +1094,49 @@ public class DefaultMessageStore implements MessageStore {
         return queryMessageResult;
     }
 
+    /**
+     * 获取topic-queueId consumeQueue 文件队列索引位置 minOffset --》 maxOffset 所有消息Id对应的物理偏移坐标
+     * @param topic
+     * @param queueId
+     * @param minOffset
+     * @param maxOffset
+     * @param storeHost
+     * @return
+     */
     public Map<String, Long> getMessageIds(final String topic, final int queueId, long minOffset, long maxOffset,
                                            SocketAddress storeHost) {
         Map<String, Long> messageIds = new HashMap<String, Long>();
         if (this.shutdown) {
             return messageIds;
         }
-
+        //查找创建topic queueId 对应ConsumeQueue
         ConsumeQueue consumeQueue = findConsumeQueue(topic, queueId);
         if (consumeQueue != null) {
+            //校验minOffset maxOffset
             minOffset = Math.max(minOffset, consumeQueue.getMinOffsetInQueue());
             maxOffset = Math.min(maxOffset, consumeQueue.getMaxOffsetInQueue());
 
             if (maxOffset == 0) {
                 return messageIds;
             }
-
+            //遍历条件
             long nextOffset = minOffset;
+            //从minOffset开始一条提条读取
             while (nextOffset < maxOffset) {
+                //获取索引坐标为startIndex的消息所在mappedFile的字节缓冲区分片
                 SelectMappedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(nextOffset);
                 if (bufferConsumeQueue != null) {
                     try {
                         int i = 0;
+                        //遍历字节缓冲区中的每天消息的对应的坐标信息
                         for (; i < bufferConsumeQueue.getSize(); i += ConsumeQueue.CQ_STORE_UNIT_SIZE) {
+                            //获取坐标信息中物理偏移位置
                             long offsetPy = bufferConsumeQueue.getByteBuffer().getLong();
                             final ByteBuffer msgIdMemory = ByteBuffer.allocate(MessageDecoder.MSG_ID_LENGTH);
+                            //获取消息ID
                             String msgId =
                                     MessageDecoder.createMessageId(msgIdMemory, MessageExt.socketAddress2ByteBuffer(storeHost), offsetPy);
+                            //设置到messageIds
                             messageIds.put(msgId, nextOffset++);
                             if (nextOffset > maxOffset) {
                                 return messageIds;
