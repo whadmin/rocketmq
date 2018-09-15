@@ -118,7 +118,7 @@ public class IndexService {
     }
 
     /**
-     * 如果最新写入index消息物理偏移坐标小于offset，删除所有indexFile 索引文件
+
      * @param offset
      */
     public void deleteExpiredFile(long offset) {
@@ -128,7 +128,6 @@ public class IndexService {
             if (this.indexFileList.isEmpty()) {
                 return;
             }
-            //获取第一个索引文件中第一个，也是最新的indexFile最后写入消息的物理偏移坐标
             long endPhyOffset = this.indexFileList.get(0).getEndPhyOffset();
             if (endPhyOffset < offset) {
                 files = this.indexFileList.toArray();
@@ -256,16 +255,19 @@ public class IndexService {
      * @param req
      */
     public void buildIndex(DispatchRequest req) {
+        //尝试三次，获取或者创建一个最新的可写的，IndexFile
         IndexFile indexFile = retryGetAndCreateIndexFile();
         if (indexFile != null) {
             long endPhyOffset = indexFile.getEndPhyOffset();
             DispatchRequest msg = req;
             String topic = msg.getTopic();
             String keys = msg.getKeys();
+            //校验消息是否已经被添加到索引
             if (msg.getCommitLogOffset() < endPhyOffset) {
                 return;
             }
 
+            //获取消息的类型 TRANSACTION_ROLLBACK_TYPE类型的消息不构建索引
             final int tranType = MessageSysFlag.getTransactionValue(msg.getSysFlag());
             switch (tranType) {
                 case MessageSysFlag.TRANSACTION_NOT_TYPE:
@@ -275,7 +277,8 @@ public class IndexService {
                 case MessageSysFlag.TRANSACTION_ROLLBACK_TYPE:
                     return;
             }
-
+            //针对消息存在MessageConst.PROPERTY_UNIQ_CLIENT_MESSAGE_ID_KEYIDX属性的消息构建索引
+            //表示唯一key
             if (req.getUniqKey() != null) {
                 indexFile = putKey(indexFile, msg, buildKey(topic, req.getUniqKey()));
                 if (indexFile == null) {
@@ -283,7 +286,8 @@ public class IndexService {
                     return;
                 }
             }
-
+            //针对消息存在MessageConst.PROPERTY_KEYS属性的消息构建索引
+            //表示不唯一key
             if (keys != null && keys.length() > 0) {
                 String[] keyset = keys.split(MessageConst.KEY_SEPARATOR);
                 for (int i = 0; i < keyset.length; i++) {
@@ -302,6 +306,13 @@ public class IndexService {
         }
     }
 
+    /**
+     * 向indexFile 添加消息索引信息
+     * @param indexFile
+     * @param msg
+     * @param idxKey
+     * @return
+     */
     private IndexFile putKey(IndexFile indexFile, DispatchRequest msg, String idxKey) {
         for (boolean ok = indexFile.putKey(idxKey, msg.getCommitLogOffset(), msg.getStoreTimestamp()); !ok; ) {
             log.warn("Index file [" + indexFile.getFileName() + "] is full, trying to create another one");
@@ -346,16 +357,25 @@ public class IndexService {
         return indexFile;
     }
 
+    /**
+     * 获取，创建最新的,可写的IndexFile
+     * 1 从indexFileList列表中获取最后一个IndexFile
+     * @return
+     */
     public IndexFile getAndCreateLastIndexFile() {
         IndexFile indexFile = null;
         IndexFile prevIndexFile = null;
+        // 最后一次更新索引消息物理偏移
         long lastUpdateEndPhyOffset = 0;
+        //最后一次更新索引数据时间
         long lastUpdateIndexTimestamp = 0;
 
         {
             this.readWriteLock.readLock().lock();
             if (!this.indexFileList.isEmpty()) {
+                //从indexFileList列表中获取最后一个IndexFile
                 IndexFile tmp = this.indexFileList.get(this.indexFileList.size() - 1);
+                //如果没有写满，作为最后一个可以写入IndexFile
                 if (!tmp.isWriteFull()) {
                     indexFile = tmp;
                 } else {
@@ -367,9 +387,10 @@ public class IndexService {
 
             this.readWriteLock.readLock().unlock();
         }
-
+        //需要创建一个新的indexFile
         if (indexFile == null) {
             try {
+                //以时间戳作为filename创建一个新的IndexFile,并添加到indexFileList
                 String fileName =
                     this.storePath + File.separator
                         + UtilAll.timeMillisToHumanString(System.currentTimeMillis());
@@ -383,7 +404,7 @@ public class IndexService {
             } finally {
                 this.readWriteLock.writeLock().unlock();
             }
-
+            //对已经写满IndexFile flush
             if (indexFile != null) {
                 final IndexFile flushThisFile = prevIndexFile;
                 Thread flushThread = new Thread(new Runnable() {
@@ -407,12 +428,14 @@ public class IndexService {
 
         long indexMsgTimestamp = 0;
 
+        //如果文件已经写满
         if (f.isWriteFull()) {
             indexMsgTimestamp = f.getEndTimestamp();
         }
-
+        //刷盘将字节缓冲区的数据写入磁盘
         f.flush();
 
+        //更新getStoreCheckpoint().setIndexMsgTimestamp
         if (indexMsgTimestamp > 0) {
             this.defaultMessageStore.getStoreCheckpoint().setIndexMsgTimestamp(indexMsgTimestamp);
             this.defaultMessageStore.getStoreCheckpoint().flush();

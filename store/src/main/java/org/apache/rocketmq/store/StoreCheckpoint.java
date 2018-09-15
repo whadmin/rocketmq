@@ -40,11 +40,11 @@ public class StoreCheckpoint {
 
     private final MappedByteBuffer mappedByteBuffer;
 
-    //CommitLog 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
+    //CommitLog 文件队列更新时间【mappedFile字节缓存区刷写如磁盘时都会更新】
     private volatile long physicMsgTimestamp = 0;
-    //ConsumeQueue 文件队列更新时间【写入字节缓冲区或刷写入磁盘都会更新】
+    //ConsumeQueue 文件队列更新时间【写入mappedFile字节缓存区或者将mappedFile字节缓存区刷写如磁盘时都会更新】
     private volatile long logicsMsgTimestamp = 0;
-    //index 文件更新时间【写入字节缓冲区或刷写入磁盘都会更新】
+    //index indexFile最后一个写满的文件最后一次更新时间
     private volatile long indexMsgTimestamp = 0;
 
     public StoreCheckpoint(final String scpPath) throws IOException {
