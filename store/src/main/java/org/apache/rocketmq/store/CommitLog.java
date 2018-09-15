@@ -217,14 +217,16 @@ public class CommitLog {
 
     /************************  读取CommitLog文件队列star  ************************/
     /**
-     * 依据offset读取CommitLog文件队列,
+     * 查询offset偏移位置所在commitLog文件队列中mappedFile
+     * 并获取mappedFile 从offset偏移位置开始的所有数据
      */
     public SelectMappedBufferResult getData(final long offset) {
         return this.getData(offset, offset == 0);
     }
 
     /**
-     * 依据offset读取CommitLog文件队列数据,
+     * 查询offset偏移位置所在commitLog文件队列中mappedFile
+     * 并获取mappedFile 从offset偏移位置开始的所有数据
      */
     public SelectMappedBufferResult getData(final long offset, final boolean returnFirstOnNotFound) {
         int mappedFileSize = this.defaultMessageStore.getMessageStoreConfig().getMapedFileSizeCommitLog();
@@ -663,7 +665,7 @@ public class CommitLog {
     }
 
     /**
-     * 直接追加数据到fileChannel
+     * 追加数据到startOffset所在MappedFile
      * @param startOffset
      * @param data
      * @return

@@ -878,32 +878,6 @@ public class DefaultMessageStore implements MessageStore {
 
 
 
-    @Override
-    public SelectMappedBufferResult getCommitLogData(final long offset) {
-        if (this.shutdown) {
-            log.warn("message store has shutdown, so getPhyQueueData is forbidden");
-            return null;
-        }
-
-        return this.commitLog.getData(offset);
-    }
-
-    @Override
-    public boolean appendToCommitLog(long startOffset, byte[] data) {
-        if (this.shutdown) {
-            log.warn("message store has shutdown, so appendToPhyQueue is forbidden");
-            return false;
-        }
-
-        boolean result = this.commitLog.appendData(startOffset, data);
-        if (result) {
-            this.reputMessageService.wakeup();
-        } else {
-            log.error("appendToPhyQueue failed " + startOffset + " " + data.length);
-        }
-
-        return result;
-    }
 
 
     /*********************** ha相关函数star  ***********************/
@@ -931,6 +905,50 @@ public class DefaultMessageStore implements MessageStore {
 
     /*********************** commitLog相关函数star  ***********************/
 
+    /**
+     * 查询offset偏移位置所在commitLog文件队列中mappedFile
+     * 并获取mappedFile 从offset偏移位置开始的所有数据
+     * @param offset starting offset.
+     * @return
+     */
+    @Override
+    public SelectMappedBufferResult getCommitLogData(final long offset) {
+        if (this.shutdown) {
+            log.warn("message store has shutdown, so getPhyQueueData is forbidden");
+            return null;
+        }
+
+        return this.commitLog.getData(offset);
+    }
+
+    /**
+     *  追加数据到startOffset所在MappedFile
+     * @param startOffset starting offset.
+     * @param data        data to append.
+     * @return
+     */
+    @Override
+    public boolean appendToCommitLog(long startOffset, byte[] data) {
+        if (this.shutdown) {
+            log.warn("message store has shutdown, so appendToPhyQueue is forbidden");
+            return false;
+        }
+
+        boolean result = this.commitLog.appendData(startOffset, data);
+        if (result) {
+            this.reputMessageService.wakeup();
+        } else {
+            log.error("appendToPhyQueue failed " + startOffset + " " + data.length);
+        }
+
+        return result;
+    }
+
+    /**
+     * 清理掉topic集合所有topic在commitLog中的索引坐标
+     * @param topics all valid topics.
+     * @return
+     */
     @Override
     public int cleanUnusedTopic(Set<String> topics) {
         Iterator<Entry<String, ConcurrentMap<Integer, ConsumeQueue>>> it = this.consumeQueueTable.entrySet().iterator();
@@ -1096,7 +1114,8 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 获取topic-queueId consumeQueue 文件队列索引位置 minOffset --》 maxOffset 所有消息Id对应的物理偏移坐标
+     * 获取topic-queueId consumeQueue文件队列中索引位置从minOffset到maxOffset
+     * 所有消息Id对应的物理偏移坐标
      * @param topic
      * @param queueId
      * @param minOffset
