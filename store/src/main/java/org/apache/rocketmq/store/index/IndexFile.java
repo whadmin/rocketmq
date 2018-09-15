@@ -28,12 +28,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * IndexFile 记录了 SlotTable 以及 Index Linked List
+ * IndexFile 用来记录索引信息
  *
- * SlotTable
- * 默认有500w个槽（可以理解为hash到这500w个槽中），每个槽占4个字节，也就是一个int值,这个int值范围是[1,2000w],2000w是默认的索引文件数量。
+ * 结构如下   indexHeader + SlotTable + Index Linked List
  *
+ * indexHeader  表示索引头部信息 长度固定为40个字节  记录索引总体统计信息
  *
+   beginTimestamp  IndexFile创建时间
+   endTimestamp    IndexFile最后更新时间
+   beginPhyOffset  存储消息初始物理偏移
+   endPhyOffset    存储消息最大物理偏移
+   indexCount      记录IndexFile 消息数量（每次添加+1）,同时作为消息在索引链表的下标
+
+ * SlotTable    表示索引的槽表,长度固定为4个字节 *  500w（默认500W）  4个字节一个int 用来记录一条在索引链表的索引（下标）.
+ * 每个消息具体的填充到哪个槽位通过消息key的hash值计算得到，
+ * 因为只有500W个槽位同时可能多个消息的槽位可能相同，后者会覆盖前者。
+ *
+ * Index Linked List  表示索引链表,长度固定为20字节 * 2000w记录（2000w）
+ *
+ * 20个字节结构如下
+ *
+ * keyHash: 4位，int值，key的hash值
+ * phyOffset：8位，long值，索引消息commitLog偏移量endTimestamp
+ * timeDiff: 4位，int值，索引存储的时间与IndexHeader的beginTimestamp时间差(这是为了节省空间)
+ * slotValue:4位，int值，索引对应slot的上一条索引的下标(据此完成一条向老记录的链表)
+
  */
 public class IndexFile {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
@@ -158,10 +177,21 @@ public class IndexFile {
         return this.mappedFile.destroy(intervalForcibly);
     }
 
+    /**
+     * 存放一条索引消息
+     * @param key   消息的key
+     * @param phyOffset       消息的物理偏移
+     * @param storeTimestamp  消息的存储时间
+     * @return
+     */
     public boolean putKey(final String key, final long phyOffset, final long storeTimestamp) {
+        //校验 IndexFile文件存储的消息索引是否超过限制的最大数量
         if (this.indexHeader.getIndexCount() < this.indexNum) {
+            //获取key的hash值(int)，转成绝对值
             int keyHash = indexKeyHashMethod(key);
+            //计算消息key hash值对应的Slot槽位置
             int slotPos = keyHash % this.hashSlotNum;
+            //获取Slot槽位置在indexfile的偏移坐标
             int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
 
             FileLock fileLock = null;
@@ -187,15 +217,20 @@ public class IndexFile {
                     timeDiff = 0;
                 }
 
+                //计算得到当前填充消息的索引链表中的偏移坐标
                 int absIndexPos =
                     IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
                         + this.indexHeader.getIndexCount() * indexSize;
-
+                /**
+                 * 将消息的索引数据，添加到链表中
+                 */
                 this.mappedByteBuffer.putInt(absIndexPos, keyHash);
                 this.mappedByteBuffer.putLong(absIndexPos + 4, phyOffset);
                 this.mappedByteBuffer.putInt(absIndexPos + 4 + 8, (int) timeDiff);
                 this.mappedByteBuffer.putInt(absIndexPos + 4 + 8 + 4, slotValue);
-
+                /**
+                 * 将消息在链表中的索引（下标），添加到对应的槽位中
+                 */
                 this.mappedByteBuffer.putInt(absSlotPos, this.indexHeader.getIndexCount());
 
                 if (this.indexHeader.getIndexCount() <= 1) {
@@ -228,37 +263,21 @@ public class IndexFile {
         return false;
     }
 
-    public int indexKeyHashMethod(final String key) {
-        int keyHash = key.hashCode();
-        int keyHashPositive = Math.abs(keyHash);
-        if (keyHashPositive < 0)
-            keyHashPositive = 0;
-        return keyHashPositive;
-    }
-
-    public long getBeginTimestamp() {
-        return this.indexHeader.getBeginTimestamp();
-    }
-
-    public long getEndTimestamp() {
-        return this.indexHeader.getEndTimestamp();
-    }
-
-    public long getEndPhyOffset() {
-        return this.indexHeader.getEndPhyOffset();
-    }
-
-    public boolean isTimeMatched(final long begin, final long end) {
-        boolean result = begin < this.indexHeader.getBeginTimestamp() && end > this.indexHeader.getEndTimestamp();
-        result = result || (begin >= this.indexHeader.getBeginTimestamp() && begin <= this.indexHeader.getEndTimestamp());
-        result = result || (end >= this.indexHeader.getBeginTimestamp() && end <= this.indexHeader.getEndTimestamp());
-        return result;
-    }
-
+    /**
+     * 通过key和时间为条件查询消息物理偏移列表
+     * @param phyOffsets  物理偏移列表,用于返回
+     * @param key
+     * @param maxNum      物理偏移列表最多保存记录大于则直接返回
+     * @param begin       开始时间戳
+     * @param end         结束时间戳
+     * @param lock
+     */
     public void selectPhyOffset(final List<Long> phyOffsets, final String key, final int maxNum,
-        final long begin, final long end, boolean lock) {
+                                final long begin, final long end, boolean lock) {
         if (this.mappedFile.hold()) {
+            //获取key的hash值(int)，转成绝对值
             int keyHash = indexKeyHashMethod(key);
+            //计算消息key hash值对应的Slot槽位置
             int slotPos = keyHash % this.hashSlotNum;
             int absSlotPos = IndexHeader.INDEX_HEADER_SIZE + slotPos * hashSlotSize;
 
@@ -276,7 +295,7 @@ public class IndexFile {
                 // }
 
                 if (slotValue <= invalidIndex || slotValue > this.indexHeader.getIndexCount()
-                    || this.indexHeader.getIndexCount() <= 1) {
+                        || this.indexHeader.getIndexCount() <= 1) {
                 } else {
                     for (int nextIndexToRead = slotValue; ; ) {
                         if (phyOffsets.size() >= maxNum) {
@@ -284,8 +303,8 @@ public class IndexFile {
                         }
 
                         int absIndexPos =
-                            IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
-                                + nextIndexToRead * indexSize;
+                                IndexHeader.INDEX_HEADER_SIZE + this.hashSlotNum * hashSlotSize
+                                        + nextIndexToRead * indexSize;
 
                         int keyHashRead = this.mappedByteBuffer.getInt(absIndexPos);
                         long phyOffsetRead = this.mappedByteBuffer.getLong(absIndexPos + 4);
@@ -307,8 +326,8 @@ public class IndexFile {
                         }
 
                         if (prevIndexRead <= invalidIndex
-                            || prevIndexRead > this.indexHeader.getIndexCount()
-                            || prevIndexRead == nextIndexToRead || timeRead < begin) {
+                                || prevIndexRead > this.indexHeader.getIndexCount()
+                                || prevIndexRead == nextIndexToRead || timeRead < begin) {
                             break;
                         }
 
@@ -329,5 +348,44 @@ public class IndexFile {
                 this.mappedFile.release();
             }
         }
+    }
+
+    /**
+     * 获取key的hash值(int)，转成绝对值
+     * @param key
+     * @return
+     */
+    public int indexKeyHashMethod(final String key) {
+        int keyHash = key.hashCode();
+        int keyHashPositive = Math.abs(keyHash);
+        if (keyHashPositive < 0)
+            keyHashPositive = 0;
+        return keyHashPositive;
+    }
+
+    /**
+     * [begin,end]时间与 [indexHeader.getBeginTimestamp(), this.indexHeader.getEndTimestamp()]时间有重叠
+     * @param begin
+     * @param end
+     * @return
+     */
+    public boolean isTimeMatched(final long begin, final long end) {
+        boolean result = begin < this.indexHeader.getBeginTimestamp() && end > this.indexHeader.getEndTimestamp();
+        result = result || (begin >= this.indexHeader.getBeginTimestamp() && begin <= this.indexHeader.getEndTimestamp());
+        result = result || (end >= this.indexHeader.getBeginTimestamp() && end <= this.indexHeader.getEndTimestamp());
+        return result;
+    }
+
+
+    public long getBeginTimestamp() {
+        return this.indexHeader.getBeginTimestamp();
+    }
+
+    public long getEndTimestamp() {
+        return this.indexHeader.getEndTimestamp();
+    }
+
+    public long getEndPhyOffset() {
+        return this.indexHeader.getEndPhyOffset();
     }
 }

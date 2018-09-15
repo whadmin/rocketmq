@@ -73,8 +73,15 @@ public class IndexHeader {
      * 结束物理偏移
      */
     private AtomicLong endPhyOffset = new AtomicLong(0);
+
+    /**
+     * 记录IndexFile 被占用槽的数量
+     */
     private AtomicInteger hashSlotCount = new AtomicInteger(0);
 
+    /**
+     * 记录IndexFile 消息数量（每次添加+1）,同时作为消息在索引链表的下标
+     */
     private AtomicInteger indexCount = new AtomicInteger(1);
 
     public IndexHeader(final ByteBuffer byteBuffer) {
