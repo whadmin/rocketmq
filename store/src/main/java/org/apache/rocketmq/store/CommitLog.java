@@ -753,6 +753,7 @@ public class CommitLog {
 
 
     /**
+     * 通过消息的偏移坐标和大小
      * 获取消息commitLog文件队列中的消息存储时间
      * @param offset  消息的物理偏移坐标
      * @param size    消息大小
@@ -777,9 +778,10 @@ public class CommitLog {
     }
 
     /**
-     * 获取消息commitLog文件队列中的消息数据
+     * 通过消息物理偏移坐标和长度
+     * 查询消在commitLog文件队列中存储数据
      * @param offset  消息的物理偏移坐标
-     * @param size    消息大小
+     * @param size    大小
      * @return
      */
     public SelectMappedBufferResult getMessage(final long offset, final int size) {
@@ -1852,7 +1854,8 @@ public class CommitLog {
     }
 
     /**
-     * 都清除掉offset偏移坐标之后的MappedFile,并重置offset偏移坐标MappedFile
+     * 重置commitLog文件队列最大偏移位置 offset
+     * 大于offset偏移坐标的文件删除
      * @param offset
      * @return
      */

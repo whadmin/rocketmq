@@ -95,17 +95,14 @@ public class MessageDecoder {
     }
 
     /**
-     * Just decode properties from msg buffer.
-     *
+     * 获取消息对应字节缓冲区中属性数据
      * @param byteBuffer msg commit log buffer.
      */
     public static Map<String, String> decodeProperties(java.nio.ByteBuffer byteBuffer) {
+        //
         int topicLengthPosition = BODY_SIZE_POSITION + 4 + byteBuffer.getInt(BODY_SIZE_POSITION);
-
         byte topicLength = byteBuffer.get(topicLengthPosition);
-
         short propertiesLength = byteBuffer.getShort(topicLengthPosition + 1 + topicLength);
-
         byteBuffer.position(topicLengthPosition + 1 + topicLength + 2);
 
         if (propertiesLength > 0) {
@@ -118,18 +115,13 @@ public class MessageDecoder {
         return null;
     }
 
-    public static MessageExt decode(java.nio.ByteBuffer byteBuffer) {
-        return decode(byteBuffer, true, true, false);
-    }
-
-    public static MessageExt clientDecode(java.nio.ByteBuffer byteBuffer, final boolean readBody) {
-        return decode(byteBuffer, readBody, true, true);
-    }
-
-    public static MessageExt decode(java.nio.ByteBuffer byteBuffer, final boolean readBody) {
-        return decode(byteBuffer, readBody, true, false);
-    }
-
+    /**
+     * 将MessageExt消息写入转为字节数组
+     * @param messageExt
+     * @param needCompress
+     * @return
+     * @throws Exception
+     */
     public static byte[] encode(MessageExt messageExt, boolean needCompress) throws Exception {
         byte[] body = messageExt.getBody();
         byte[] topics = messageExt.getTopic().getBytes(CHARSET_UTF8);
@@ -238,11 +230,45 @@ public class MessageDecoder {
         return byteBuffer.array();
     }
 
+    /**
+     * 将字节缓冲区中额数据读取出来转化为MessageExt消息
+     * @param byteBuffer
+     * @param readBody
+     * @return
+     */
+    public static MessageExt decode(java.nio.ByteBuffer byteBuffer, final boolean readBody) {
+        return decode(byteBuffer, readBody, true, false);
+    }
+
+    /**
+     * 将字节缓冲区中额数据读取出来转化为MessageExt消息
+     * @param byteBuffer
+     * @param readBody
+     * @param deCompressBody
+     * @return
+     */
     public static MessageExt decode(
         java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody) {
         return decode(byteBuffer, readBody, deCompressBody, false);
     }
 
+    /**
+     * 将字节缓冲区中额数据读取出来转化为MessageExt消息
+     * @param byteBuffer
+     * @return
+     */
+    public static MessageExt decode(java.nio.ByteBuffer byteBuffer) {
+        return decode(byteBuffer, true, true, false);
+    }
+
+    /**
+     * 将字节缓冲区中额数据读取出来转化为MessageExt消息
+     * @param byteBuffer
+     * @param readBody
+     * @param deCompressBody
+     * @param isClient
+     * @return
+     */
     public static MessageExt decode(
         java.nio.ByteBuffer byteBuffer, final boolean readBody, final boolean deCompressBody, final boolean isClient) {
         try {
@@ -363,10 +389,21 @@ public class MessageDecoder {
         return null;
     }
 
+    /**
+     * 将字节缓冲区中额数据读取出来转化为多条MessageExt消息
+     * @param byteBuffer
+     * @return
+     */
     public static List<MessageExt> decodes(java.nio.ByteBuffer byteBuffer) {
         return decodes(byteBuffer, true);
     }
 
+    /**
+     * 将字节缓冲区中额数据读取出来转化为多条MessageExt消息
+     * @param byteBuffer
+     * @param readBody
+     * @return
+     */
     public static List<MessageExt> decodes(java.nio.ByteBuffer byteBuffer, final boolean readBody) {
         List<MessageExt> msgExts = new ArrayList<MessageExt>();
         while (byteBuffer.hasRemaining()) {
@@ -379,6 +416,18 @@ public class MessageDecoder {
         }
         return msgExts;
     }
+
+    /**
+     * 将字节缓冲区中额数据读取出来转化为多条MessageExt消息
+     * @param byteBuffer
+     * @param readBody
+     * @return
+     */
+    public static MessageExt clientDecode(java.nio.ByteBuffer byteBuffer, final boolean readBody) {
+        return decode(byteBuffer, readBody, true, true);
+    }
+
+
 
     public static String messageProperties2String(Map<String, String> properties) {
         StringBuilder sb = new StringBuilder();
@@ -412,7 +461,7 @@ public class MessageDecoder {
     }
 
     /**
-     * 将消息编码为字节数组
+     * 将Message消息编码为字节数组
      * @param message
      * @return
      */
@@ -464,7 +513,7 @@ public class MessageDecoder {
     }
 
     /**
-     * 将字节缓冲区中额数据读取出来转化为一条消息
+     * 将字节缓冲区中额数据读取出来转化为Message消息
      * @param byteBuffer
      * @return
      * @throws Exception
@@ -501,7 +550,7 @@ public class MessageDecoder {
     }
 
     /**
-     * 针对批量消息做编码转化为字节数组
+     * 针对批量Message消息做编码转化为字节数组
      * @param messages
      * @return
      */
@@ -524,7 +573,7 @@ public class MessageDecoder {
     }
 
     /**
-     * 将字节缓冲区中数组转化为多条消息
+     * 将字节缓冲区中数组转化为多条Message消息
      * @param byteBuffer
      * @return
      * @throws Exception

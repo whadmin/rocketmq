@@ -567,7 +567,8 @@ public class MappedFileQueue {
 
     /*********************** 获取设置MappedFileQueue偏移 star  ***********************/
     /**
-     * 重置文件队列最大偏移位置
+     * 重置文件队列最大偏移位置 offset
+     * 大于offset偏移坐标的文件删除
      * @param offset
      * @return
      */

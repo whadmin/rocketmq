@@ -764,6 +764,10 @@ public class ConsumeQueue {
         return result;
     }
 
+    /**
+     * 获取ConsumeQueue文件队列中最小CommitLog物理偏移坐标
+     * @return
+     */
     public long getMinLogicOffset() {
         return minLogicOffset;
     }
