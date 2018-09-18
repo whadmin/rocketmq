@@ -981,8 +981,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 查询消息
-     *
+     * 根据消息索引key和消息产生时间查询消息
      * @param topic  topic of the message.  消息topic
      * @param key    message key.             消息key
      * @param maxNum maximum number of the messages possible. 返回满足消息的最大数量
@@ -1061,9 +1060,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 通过消息物理偏移坐
-     * 查询一条消息在commitLog文件队列中存储的节点数据，转换为消息
-     *
+     * 通过消息物理偏移从commitLog文件队列中查询消息数据
      * @param commitLogOffset physical offset.
      * @return
      */
@@ -1083,9 +1080,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 通过消息物理偏移坐标和大小
-     * 查询一条消息在commitLog文件队列中存储的节点数据，转换为消息
-     *
+     * 通过消息物理偏移和大小从commitLog文件队列中查询消息数据
      * @param commitLogOffset
      * @param size
      * @return
@@ -1104,9 +1099,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     /**
-     * 获取topic-queueId consumeQueue文件队列中索引位置从minOffset到maxOffset
-     * 所有消息Id对应的物理偏移坐标
-     *
+     * 获取topic-queueId对应consumeQueue文件队列中索引位置从minOffset到maxOffset所有消息物理偏移坐标和消息ID
      * @param topic
      * @param queueId
      * @param minOffset
