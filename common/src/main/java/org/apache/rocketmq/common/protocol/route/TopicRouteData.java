@@ -29,7 +29,8 @@ import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
  * TopicRouteData 描述了从Namesrv获取的topic路由信息
  */
 public class TopicRouteData extends RemotingSerializable {
-    //namesrv开启OrderMessageEnable会从KvConfigManager获取topic对应的配置 brokerName2:queueNum;brokerName2:queueNum;
+    //namesrv开启OrderMessageEnable时
+    //获取路由消息会优先从KvConfigManager获取,格式:brokerName2:queueNum;brokerName2:queueNum;
     private String orderTopicConf;
     //topic 在不同master broker
     private List<QueueData> queueDatas;

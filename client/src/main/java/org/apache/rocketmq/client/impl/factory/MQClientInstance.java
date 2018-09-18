@@ -82,11 +82,31 @@ import org.apache.rocketmq.remoting.netty.NettyClientConfig;
 import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.slf4j.Logger;
 
+/**
+ * MQClientInstance 服务于如下4个角色 RPC远程调用客户端通用实现
+ *
+ * DefaultMQAdminExtImpl            运维系统Admin
+ * DefaultMQProducerImpl            生成消息Producer
+ * DefaultMQPushConsumerImpl        推送消息Consumer
+ * DefaultMQPullConsumerImpl        拉取消息Consumer
+ *
+ * MQClientInstance
+ */
 public class MQClientInstance {
+
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
     private final Logger log = ClientLogger.getLog();
+    /**
+     * 客户端配置不同的角色这里会有不同的子类来实现
+     *     DefaultMQAdminExt (org.apache.rocketmq.tools.admin)
+     *     DefaultMQProducer (org.apache.rocketmq.client.producer)
+     *         TransactionMQProducer (org.apache.rocketmq.client.producer)
+     *     DefaultMQPullConsumer (org.apache.rocketmq.client.consumer)
+     *     DefaultMQPushConsumer (org.apache.rocketmq.client.consumer)
+     */
     private final ClientConfig clientConfig;
     private final int instanceIndex;
+
     private final String clientId;
     private final long bootTimestamp = System.currentTimeMillis();
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();

@@ -57,27 +57,23 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsumer {
 
     /**
-     * Internal implementation. Most of the functions herein are delegated to it.
+     * MQPush内部内部核心实现类。, DefaultMQPushConsumer大多数功能都委托给处理执行。
      */
     protected final transient DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
 
     /**
-     * Consumers of the same role is required to have exactly same subscriptions and consumerGroup to correctly achieve
-     * load balance. It's required and needs to be globally unique.
-     * </p>
-     *
-     * See <a href="http://rocketmq.apache.org/docs/core-concept/">here</a> for further discussion.
+     * 消费者组名，必须设置
+     * 具有相同角色的消费者需要具有完全相同的订阅和consumerGroup才能正确实现*负载平衡
      */
     private String consumerGroup;
 
     /**
-     * Message model defines the way how messages are delivered to each consumer clients.
+     * 消息模型定义消息如何传递给每个消费者客户端的方式。
      * </p>
      *
-     * RocketMQ supports two message models: clustering and broadcasting. If clustering is set, consumer clients with
-     * the same {@link #consumerGroup} would only consume shards of the messages subscribed, which achieves load
-     * balances; Conversely, if the broadcasting is set, each consumer client will consume all subscribed messages
-     * separately.
+     * RocketMQ支持两种消息模型：集群和广播,
+     * 集群：具有*相同{@link #consumerGroup}的消费者客户端,
+     * 相反，如果设置了广播，则每个消费者客户端将分别消费所有订阅的消息*。
      * </p>
      *
      * This field defaults to clustering.
