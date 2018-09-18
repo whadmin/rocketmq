@@ -348,6 +348,7 @@ public class DefaultMessageStore implements MessageStore {
         log.info(fileName + (result ? " create OK" : " already exists"));
     }
 
+
     public void shutdown() {
         if (!this.shutdown) {
             this.shutdown = true;

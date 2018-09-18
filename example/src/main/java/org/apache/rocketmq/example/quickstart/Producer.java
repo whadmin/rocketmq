@@ -48,6 +48,7 @@ public class Producer {
         /*
          * Launch the instance.
          */
+        producer.setSendLatencyFaultEnable(true);
         producer.start();
 
         for (int i = 0; i < 1000; i++) {

@@ -636,7 +636,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     /**
      * 从namesrv获取topic发送路由信息
      * <p>
-     * 1 从本地记录的topicPublishInfoTable 获取，【topicPublishInfoTable写入在MQClientInstance.updateTopicRouteInfoFromNameServer中】
+     * 1 从本地记录的topicPublishInfoTable 获取
      * <p>
      * 2 1没有获取路由信息,从namesrv获取发送路由信息
      * <p>
@@ -1289,7 +1289,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
      * #- ASYNC_MASTER 异步复制Master
      * #- SYNC_MASTER 同步双写Master
      *
-     * @param key
+     * @param key  模板topic
      * @param newTopic
      * @param queueNum
      * @param topicSysFlag

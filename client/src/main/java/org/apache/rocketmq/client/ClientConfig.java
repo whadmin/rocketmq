@@ -22,7 +22,7 @@ import org.apache.rocketmq.remoting.common.RemotingUtil;
 import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
 
 /**
- * 客户端通用配置类,描述Producer，Consumer通用配置信息
+ * 客户端通用配置类,描述Producer，Consume，Adminr通用配置信息
  * ClientConfig (org.apache.rocketmq.client)
  *     DefaultMQAdminExt (org.apache.rocketmq.tools.admin)
  *     DefaultMQProducer (org.apache.rocketmq.client.producer)
@@ -32,26 +32,43 @@ import org.apache.rocketmq.remoting.netty.TlsSystemConfig;
  */
 public class ClientConfig {
     public static final String SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY = "com.rocketmq.sendMessageWithVIPChannel";
+
+
+    /**
+     * namesrv地址
+     */
     private String namesrvAddr = System.getProperty(MixAll.NAMESRV_ADDR_PROPERTY, System.getenv(MixAll.NAMESRV_ADDR_ENV));
+
+    /**
+     * 客户端本地IP地址
+     */
     private String clientIP = RemotingUtil.getLocalAddress();
 
     /**
      * 客户端名称
      */
     private String instanceName = System.getProperty("rocketmq.client.name", "DEFAULT");
-    private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
+
     /**
-     * 从NameServer中提取主题信息间隔
+     * Java虚拟机的可用的处理器数量
+     */
+    private int clientCallbackExecutorThreads = Runtime.getRuntime().availableProcessors();
+
+    /**
+     * 向NameServer拉取路由信息间隔
      */
     private int pollNameServerInterval = 1000 * 30;
+
     /**
-     * broker 心跳间隔
+     * 向broker发送心跳间隔
      */
     private int heartbeatBrokerInterval = 1000 * 30;
+
     /**
      * 消费者的抵消持续间隔
      */
     private int persistConsumerOffsetInterval = 1000 * 5;
+
     /**
      * 是否单元化
      */
@@ -63,14 +80,14 @@ public class ClientConfig {
     private String unitName;
 
     /**
-     * 是否开启连接 broker vip通道
+     * 是否开启连接broker vip通道
      */
     private boolean vipChannelEnabled = Boolean.parseBoolean(System.getProperty(SEND_MESSAGE_WITH_VIP_CHANNEL_PROPERTY, "true"));
 
     private boolean useTLS = TlsSystemConfig.tlsEnable;
 
     /**
-     * 生成一个客户端id  规则为 IP@instanceName
+     * 生成一个客户端id  规则为本地IP@instanceName
      * @return
      */
     public String buildMQClientId() {
@@ -95,6 +112,8 @@ public class ClientConfig {
         this.clientIP = clientIP;
     }
 
+
+
     public String getInstanceName() {
         return instanceName;
     }
@@ -104,7 +123,7 @@ public class ClientConfig {
     }
 
     /**
-     * 修改instanceName为客户端进程ID
+     * 设置instanceName为客户端进程ID
      */
     public void changeInstanceNameToPID() {
         if (this.instanceName.equals("DEFAULT")) {

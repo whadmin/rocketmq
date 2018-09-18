@@ -25,10 +25,20 @@ import org.apache.rocketmq.client.log.ClientLogger;
 import org.apache.rocketmq.remoting.RPCHook;
 import org.slf4j.Logger;
 
+/**
+ * MQClientManager：是一个单例工厂类，用来构造MQClientInstance实例
+ *
+ *  在同一个JVM内部客户端ID相同的MQClientInstance是复用的
+ *
+ *  客户端ID：本地IP@instanceName
+ */
 public class MQClientManager {
     private final static Logger log = ClientLogger.getLog();
     private static MQClientManager instance = new MQClientManager();
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
+    /**
+     * 使用ConcurrentMap保存构造的MQClientInstance实例
+     */
     private ConcurrentMap<String/* clientId */, MQClientInstance> factoryTable =
         new ConcurrentHashMap<String, MQClientInstance>();
 
@@ -36,10 +46,19 @@ public class MQClientManager {
 
     }
 
+    /**
+     * 获取单例MQClientManager对象
+     * @return
+     */
     public static MQClientManager getInstance() {
         return instance;
     }
 
+    /**
+     * 获取并构造
+     * @param clientConfig
+     * @return
+     */
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig) {
         return getAndCreateMQClientInstance(clientConfig, null);
     }
