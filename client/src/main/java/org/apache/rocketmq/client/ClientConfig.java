@@ -87,7 +87,7 @@ public class ClientConfig {
     private boolean useTLS = TlsSystemConfig.tlsEnable;
 
     /**
-     * 生成一个客户端id  规则为本地IP@instanceName
+     * 构造客户端ClientId  规则为本地IP@instanceName
      * @return
      */
     public String buildMQClientId() {

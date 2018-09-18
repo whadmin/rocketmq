@@ -34,7 +34,14 @@ import org.slf4j.Logger;
  */
 public class MQClientManager {
     private final static Logger log = ClientLogger.getLog();
+
+    /**
+     * 单例MQClientManager
+     */
     private static MQClientManager instance = new MQClientManager();
+    /**
+     * MQClientInstance.instanceIndex 计数器
+     */
     private AtomicInteger factoryIndexGenerator = new AtomicInteger();
     /**
      * 使用ConcurrentMap保存构造的MQClientInstance实例
@@ -55,7 +62,7 @@ public class MQClientManager {
     }
 
     /**
-     * 获取并构造
+     * 获取并构造MQClientInstance
      * @param clientConfig
      * @return
      */
@@ -64,12 +71,19 @@ public class MQClientManager {
     }
 
     public MQClientInstance getAndCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
+        //构造客户端ClientId
         String clientId = clientConfig.buildMQClientId();
+        //从factoryTable获取MQClientInstance
         MQClientInstance instance = this.factoryTable.get(clientId);
+        //factoryTable没有指定clientId对应MQClientInstance，则创建一个MQClientInstance
+        //并添加到factoryTable
         if (null == instance) {
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);
+            //putIfAbsent
+            //如果不存在（新的entry），那么会向map中添加该键值对，并返回null。
+            //如果已经存在，那么不会覆盖已有的值，直接返回已经存在的值。
             MQClientInstance prev = this.factoryTable.putIfAbsent(clientId, instance);
             if (prev != null) {
                 instance = prev;

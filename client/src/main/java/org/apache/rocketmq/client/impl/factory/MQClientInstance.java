@@ -90,12 +90,27 @@ import org.slf4j.Logger;
  * DefaultMQPushConsumerImpl        推送消息Consumer
  * DefaultMQPullConsumerImpl        拉取消息Consumer
  *
- * MQClientInstance
+ * MQClientInstance 通过 MQClientManager工厂对象创建，每一个JVM内部客户端ID相同的MQClientInstance是复用的
  */
 public class MQClientInstance {
 
     private final static long LOCK_TIMEOUT_MILLIS = 3000;
+
+    /**
+     * log
+     */
     private final Logger log = ClientLogger.getLog();
+
+    /**
+     * Namesrv同步锁
+     */
+    private final Lock lockNamesrv = new ReentrantLock();
+
+    /**
+     * Heartbeat同步锁
+     */
+    private final Lock lockHeartbeat = new ReentrantLock();
+
     /**
      * 客户端配置不同的角色这里会有不同的子类来实现
      *     DefaultMQAdminExt (org.apache.rocketmq.tools.admin)
@@ -105,34 +120,107 @@ public class MQClientInstance {
      *     DefaultMQPushConsumer (org.apache.rocketmq.client.consumer)
      */
     private final ClientConfig clientConfig;
+
+    /**
+     * 客户端ID下标【MQClientManager创建MQClientInstance会通过factoryIndexGenerator累加】
+     */
     private final int instanceIndex;
 
+    /**
+     * 客户端ID
+     */
     private final String clientId;
+
+    /**
+     * bootTimestamp
+     */
     private final long bootTimestamp = System.currentTimeMillis();
+
+    /**
+     * 使用ConcurrentMap保存 producer.groupName 和对应 MQProducerInner【MQClientInstance作用于Producer时有用】
+     */
     private final ConcurrentMap<String/* group */, MQProducerInner> producerTable = new ConcurrentHashMap<String, MQProducerInner>();
+
+    /**
+     * 使用ConcurrentMap保存 consumer.groupName 和对应 MQConsumerInner【MQClientInstance作用于Consumer时有用】
+     */
     private final ConcurrentMap<String/* group */, MQConsumerInner> consumerTable = new ConcurrentHashMap<String, MQConsumerInner>();
+
+    /**
+     * 使用ConcurrentMap保存 Admin.groupName    和对应 MQAdminExtInner【MQClientInstance作用于Admin时有用】
+     */
     private final ConcurrentMap<String/* group */, MQAdminExtInner> adminExtTable = new ConcurrentHashMap<String, MQAdminExtInner>();
-    private final NettyClientConfig nettyClientConfig;
-    private final MQClientAPIImpl mQClientAPIImpl;
-    private final MQAdminImpl mQAdminImpl;
+
+    /**
+     * 使用ConcurrentMap保存 topic 和对应路由信息【哪些broker保存topic对应的消息，分别用了多少个MessageQueue存储，brokerID数据等】
+     */
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
-    private final Lock lockNamesrv = new ReentrantLock();
-    private final Lock lockHeartbeat = new ReentrantLock();
+
+    /**
+     * 使用ConcurrentMap保存 Broker数据  MQClientInstance【producer或consumer】会定时向NameSer获取关注topic路由信息，并将路由信息中broker数据保存在brokerAddrTable
+     */
     private final ConcurrentMap<String/* Broker Name */, HashMap<Long/* brokerId */, String/* address */>> brokerAddrTable =
-        new ConcurrentHashMap<String, HashMap<Long, String>>();
+            new ConcurrentHashMap<String, HashMap<Long, String>>();
+
+    /**
+     * 使用ConcurrentMap保存 Broker心跳数据数据 MQClientInstance【producer或consumer】会定时向broker发送心跳数据获取broker状态
+     */
     private final ConcurrentMap<String/* Broker Name */, HashMap<String/* address */, Integer>> brokerVersionTable =
-        new ConcurrentHashMap<String, HashMap<String, Integer>>();
+            new ConcurrentHashMap<String, HashMap<String, Integer>>();
+
+    /**
+     * NettyRPC客户端配置
+     */
+    private final NettyClientConfig nettyClientConfig;
+
+    /**
+     * MQ客户端处理服务端发送请求处理类
+     */
+    private final ClientRemotingProcessor clientRemotingProcessor;
+
+    /**
+     * MQClientInstance 内部rpc调用内部核心实现
+     */
+    private final MQClientAPIImpl mQClientAPIImpl;
+
+    /**
+     * 封装了ADMIN客户端业务服务【MQClientInstance作用于Admin时有用】
+     */
+    private final MQAdminImpl mQAdminImpl;
+
+
+    /**
+     * 拉取消息服务【MQClientInstance作用于Consumer时有用】
+     */
+    private final PullMessageService pullMessageService;
+
+
+    /**
+     * 均衡消息服务【MQClientInstance作用于Consumer时有用】
+     */
+    private final RebalanceService rebalanceService;
+
+    /**
+     * Consumer统计服务【MQClientInstance作用于Consumer时有用】
+     */
+    private final ConsumerStatsManager consumerStatsManager;
+
+
+    /**
+     * 定时任务线程池
+     */
     private final ScheduledExecutorService scheduledExecutorService = Executors.newSingleThreadScheduledExecutor(new ThreadFactory() {
         @Override
         public Thread newThread(Runnable r) {
             return new Thread(r, "MQClientFactoryScheduledThread");
         }
     });
-    private final ClientRemotingProcessor clientRemotingProcessor;
-    private final PullMessageService pullMessageService;
-    private final RebalanceService rebalanceService;
+
+    /**
+     * 内置DefaultMQProducer
+     */
     private final DefaultMQProducer defaultMQProducer;
-    private final ConsumerStatsManager consumerStatsManager;
+
     private final AtomicLong sendHeartbeatTimesTotal = new AtomicLong(0);
     private ServiceState serviceState = ServiceState.CREATE_JUST;
     private DatagramSocket datagramSocket;
