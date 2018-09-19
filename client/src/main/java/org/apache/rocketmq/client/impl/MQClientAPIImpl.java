@@ -162,10 +162,29 @@ public class MQClientAPIImpl {
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
     }
 
+    /**
+     * MQ远程调用客户端
+     */
     private final RemotingClient remotingClient;
+
+    /**
+     * 寻址NameServer地址服务
+     */
     private final TopAddressing topAddressing;
+
+    /**
+     * 处理服务端请求处理器
+     */
     private final ClientRemotingProcessor clientRemotingProcessor;
+
+    /**
+     * nameSrvAddr地址
+     */
     private String nameSrvAddr = null;
+
+    /**
+     * 客户端配置
+     */
     private ClientConfig clientConfig;
 
     public MQClientAPIImpl(final NettyClientConfig nettyClientConfig,
@@ -198,6 +217,12 @@ public class MQClientAPIImpl {
         return remotingClient;
     }
 
+    /**
+     * 获取远程http服务器上面nameSrv地址
+     * 1 更新nameSrvAddr
+     * 2 更新remotingClient客户端连接的服务端地址集合对象
+     * @return
+     */
     public String fetchNameServerAddr() {
         try {
             String addrs = this.topAddressing.fetchNSAddr();
@@ -215,6 +240,10 @@ public class MQClientAPIImpl {
         return nameSrvAddr;
     }
 
+    /**
+     * 更新remotingClient客户端连接的服务端地址集合对象
+     * @param addrs
+     */
     public void updateNameServerAddressList(final String addrs) {
         List<String> lst = new ArrayList<String>();
         String[] addrArray = addrs.split(";");
@@ -850,6 +879,16 @@ public class MQClientAPIImpl {
         this.remotingClient.invokeOneway(MixAll.brokerVIPChannel(this.clientConfig.isVipChannelEnabled(), addr), request, timeoutMillis);
     }
 
+    /**
+     * 向指定ID机器发送心跳包数据
+     * @param addr   发送心跳包的IP地址
+     * @param heartbeatData  心跳包数据
+     * @param timeoutMillis  超时时间
+     * @return
+     * @throws RemotingException
+     * @throws MQBrokerException
+     * @throws InterruptedException
+     */
     public int sendHearbeat(
         final String addr,
         final HeartbeatData heartbeatData,

@@ -29,11 +29,25 @@ import org.apache.rocketmq.common.utils.HttpTinyClient;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 通过http请求远程http服务器获取nameServ服务器地址
+ */
 public class TopAddressing {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.COMMON_LOGGER_NAME);
 
+    /**
+     * nameServ地址
+     */
     private String nsAddr;
+    /**
+     * http请求url
+     * 默认MixAll.getWSAddr()
+     */
     private String wsAddr;
+    /**
+     * 单元名称【添加到http请求参数URL中，用来做单元化】
+     * 不同区域使用不同的nameSrv地址服务
+     */
     private String unitName;
 
     public TopAddressing(final String wsAddr) {
@@ -60,10 +74,20 @@ public class TopAddressing {
         return newString;
     }
 
+    /**
+     * 获取远程http服务器上面nameSrv地址
+     * @return
+     */
     public final String fetchNSAddr() {
         return fetchNSAddr(true, 3000);
     }
 
+    /**
+     * 获取远程http服务器上面nameSrv地址
+     * @param verbose
+     * @param timeoutMills 超时时间
+     * @return
+     */
     public final String fetchNSAddr(boolean verbose, long timeoutMills) {
         String url = this.wsAddr;
         try {
