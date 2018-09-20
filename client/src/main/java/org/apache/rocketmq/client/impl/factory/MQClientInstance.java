@@ -155,7 +155,8 @@ public class MQClientInstance {
     private final ConcurrentMap<String/* Topic */, TopicRouteData> topicRouteTable = new ConcurrentHashMap<String, TopicRouteData>();
 
     /**
-     * 保存从NameSrv获取得到路由信息 ConcurrentMap集合  每一个和MQClientInstance通讯Broker地址信息
+     * 保存聚合所有从nameSrv获取得到路由信息中TopicRouteData.brokerDatas ConcurrentMap集合
+     * 用来记录需要发送心跳的broker物理机器地址
      */
     private final ConcurrentMap<String/* Broker Name */, HashMap<Long/* brokerId */, String/* address */>> brokerAddrTable =
             new ConcurrentHashMap<String, HashMap<Long, String>>();
@@ -272,19 +273,19 @@ public class MQClientInstance {
             switch (this.serviceState) {
                 case CREATE_JUST:
                     this.serviceState = ServiceState.START_FAILED;
-                    // If not specified,looking address from name server
+                    // 获取远程http服务器上面nameSrv地址
                     if (null == this.clientConfig.getNamesrvAddr()) {
                         this.mQClientAPIImpl.fetchNameServerAddr();
                     }
-                    // Start request-response channel
+                    // 启动远程remotingClient
                     this.mQClientAPIImpl.start();
-                    // Start various schedule tasks
+                    // 启动定时任务
                     this.startScheduledTask();
-                    // Start pull service
+                    // 启动拉取服务
                     this.pullMessageService.start();
-                    // Start rebalance service
+                    // 启动均衡服务
                     this.rebalanceService.start();
-                    // Start push service
+                    // 启动默认defaultMQProducer
                     this.defaultMQProducer.getDefaultMQProducerImpl().start(false);
                     log.info("the client factory [{}] start OK", this.clientId);
                     this.serviceState = ServiceState.RUNNING;
@@ -378,8 +379,15 @@ public class MQClientInstance {
         }, 10, this.clientConfig.getPollNameServerInterval(), TimeUnit.MILLISECONDS);
 
         /**
-         * 1 移除离线的broker
+         * 1 从brokerAddrTable移除离线的broker【不在发送心跳】
+         *   如果判定broker是否离线不在需要发送心跳数据 ？
+         *   1-1 broker 定时告知 namesrv 存储topic broker地址信息【路由信息】,从namesrv中存在永远是最新在运行的broker
+         *   1-2 updateTopicRouteInfoFromNameServer 会定时获取topic路由信息 更新brokerAddrTable,对于已经下线的broker地址信息不会删除
+         *   这样就会导致有不必要的心跳发送到离线的broker
+         *   1-3 定时获取更新brokerAddrTable所有地址和topicRouteTable路由中地址信息做比对，不存在则从brokerAddrTable删除
+         *
          * 2 定时向broker发送心跳
+         *   发送心跳是为了告知broker有哪些客户端在和broker进行交互角色分别是什么 MQConsumerInner 或者 MQProducerInner
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -518,18 +526,23 @@ public class MQClientInstance {
                     }
                     if (topicRouteData != null) {
                         TopicRouteData old = this.topicRouteTable.get(topic);
+                        //判断TopicRouteData 是否改变
                         boolean changed = topicRouteDataIsChange(old, topicRouteData);
                         if (!changed) {
+                            //当前topic是否被使用当前对象作为客户端MQProducerInner，MQConsumerInner【所使用关注】
                             changed = this.isNeedUpdateTopicRouteInfo(topic);
                         } else {
                             log.info("the topic[{}] route info changed, old[{}] ,new[{}]", topic, old, topicRouteData);
                         }
 
+                        //是否需要更新
                         if (changed) {
                             TopicRouteData cloneTopicRouteData = topicRouteData.cloneTopicRouteData();
 
                             /**
                              * 更新brokerAddrTable
+                             * 这里我们会将存储topic broker最新地址信息写入brokerAddrTable,如果某个broker下线,那么brokerAddrTable数据是不会删除的
+                             * 所以我们才会有cleanOfflineBroker() 定时从brokerAddrTable清理掉下线的broker
                              */
                             for (BrokerData bd : topicRouteData.getBrokerDatas()) {
                                 this.brokerAddrTable.put(bd.getBrokerName(), bd.getBrokerAddrs());
@@ -602,7 +615,6 @@ public class MQClientInstance {
      * topicRouteData转换成TopicPublishInfo
      * TopicPublishInfo 表示给MQProducerInner使用topic路由信息
      * 我们会把转换获取TopicPublishInfo更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable】
-     *
      * @param topic
      * @param route
      * @return
@@ -683,6 +695,58 @@ public class MQClientInstance {
 
         return mqList;
     }
+
+    /**
+     * 判断TopicRouteData 是否改变
+     * @param olddata
+     * @param nowdata
+     * @return
+     */
+    private boolean topicRouteDataIsChange(TopicRouteData olddata, TopicRouteData nowdata) {
+        if (olddata == null || nowdata == null)
+            return true;
+        TopicRouteData old = olddata.cloneTopicRouteData();
+        TopicRouteData now = nowdata.cloneTopicRouteData();
+        Collections.sort(old.getQueueDatas());
+        Collections.sort(old.getBrokerDatas());
+        Collections.sort(now.getQueueDatas());
+        Collections.sort(now.getBrokerDatas());
+        return !old.equals(now);
+
+    }
+
+    /**
+     * 当前topic是否被使用当前对象作为客户端MQProducerInner，MQConsumerInner【所使用关注】
+     * @param topic
+     * @return
+     */
+    private boolean isNeedUpdateTopicRouteInfo(final String topic) {
+        boolean result = false;
+        {
+            Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();
+            while (it.hasNext() && !result) {
+                Entry<String, MQProducerInner> entry = it.next();
+                MQProducerInner impl = entry.getValue();
+                if (impl != null) {
+                    result = impl.isPublishTopicNeedUpdate(topic);
+                }
+            }
+        }
+
+        {
+            Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
+            while (it.hasNext() && !result) {
+                Entry<String, MQConsumerInner> entry = it.next();
+                MQConsumerInner impl = entry.getValue();
+                if (impl != null) {
+                    result = impl.isSubscribeTopicNeedUpdate(topic);
+                }
+            }
+        }
+
+        return result;
+    }
+
     /*************************** 从NamerServer 获取topic对应的路由信息end  ***************************/
 
     /*************************** 移除离线的brokerstar  ***************************/
@@ -733,6 +797,11 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * Broker地址是否存在于某一个订阅topic路由信息broker地址列表中
+     * @param addr
+     * @return
+     */
     private boolean isBrokerAddrExistInTopicRouteTable(final String addr) {
         Iterator<Entry<String, TopicRouteData>> it = this.topicRouteTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -963,6 +1032,9 @@ public class MQClientInstance {
     /*************************** 定时向broker发送心跳end  ***************************/
 
 
+    /**
+     * 定时同步消费进度
+     */
     private void persistAllConsumerOffset() {
         Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -972,6 +1044,9 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 根据processQueueTable的大小决定是否需要增加或者减少threadPool的大小
+     */
     public void adjustThreadPool() {
         Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -1006,45 +1081,7 @@ public class MQClientInstance {
     }
 
 
-    private boolean topicRouteDataIsChange(TopicRouteData olddata, TopicRouteData nowdata) {
-        if (olddata == null || nowdata == null)
-            return true;
-        TopicRouteData old = olddata.cloneTopicRouteData();
-        TopicRouteData now = nowdata.cloneTopicRouteData();
-        Collections.sort(old.getQueueDatas());
-        Collections.sort(old.getBrokerDatas());
-        Collections.sort(now.getQueueDatas());
-        Collections.sort(now.getBrokerDatas());
-        return !old.equals(now);
 
-    }
-
-    private boolean isNeedUpdateTopicRouteInfo(final String topic) {
-        boolean result = false;
-        {
-            Iterator<Entry<String, MQProducerInner>> it = this.producerTable.entrySet().iterator();
-            while (it.hasNext() && !result) {
-                Entry<String, MQProducerInner> entry = it.next();
-                MQProducerInner impl = entry.getValue();
-                if (impl != null) {
-                    result = impl.isPublishTopicNeedUpdate(topic);
-                }
-            }
-        }
-
-        {
-            Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
-            while (it.hasNext() && !result) {
-                Entry<String, MQConsumerInner> entry = it.next();
-                MQConsumerInner impl = entry.getValue();
-                if (impl != null) {
-                    result = impl.isSubscribeTopicNeedUpdate(topic);
-                }
-            }
-        }
-
-        return result;
-    }
 
     public void shutdown() {
         // Consumer

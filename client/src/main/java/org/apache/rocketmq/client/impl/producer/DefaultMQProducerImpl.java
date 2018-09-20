@@ -95,18 +95,18 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     private final Random random = new Random();
 
     /**
-     * DefaultMQProducerImpl 作为Producer核心实现  DefaultMQProducer用来获取客户端配置
+     * DefaultMQProducer 消息生成者配置
      */
     private final DefaultMQProducer defaultMQProducer;
 
     /**
-     * topic 对应发送的路由信息,producer在发送消息会从namesrv获取发送路由信息转换为TopicPublishInfo
+     * 存储发送消息topic和对应路由信息
      */
     private final ConcurrentMap<String/* topic */, TopicPublishInfo> topicPublishInfoTable =
             new ConcurrentHashMap<String, TopicPublishInfo>();
 
     /**
-     * remoting netty 远程调用处理回调接口
+     * remoting netty 远程调用回调接口
      */
     private final RPCHook rpcHook;
 
@@ -115,33 +115,33 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     protected ExecutorService checkExecutor;
 
     /**
-     * DefaultMQProducerImpl 状态
+     * DefaultMQProducerImpl 执行状态
      */
     private ServiceState serviceState = ServiceState.CREATE_JUST;
 
     /**
-     * MQ remoting 远程客户端对象,用来处理远程调用【这个类是一个公用实现，分别实现Producer,admin,Consumer远程调用实现】
+     * MQ remoting 远程客户端对象
      */
     private MQClientInstance mQClientFactory;
 
     /**
-     * sendKernelImpl 方法内 mQClientFactory.getMQClientAPIImpl().sendMessage 发送消息前校验处理回调接口
+     * sendKernelImpl 方法内 MQClientInstance.getMQClientAPIImpl().sendMessage 发送消息前校验处理回调接口
      */
     private ArrayList<CheckForbiddenHook> checkForbiddenHookList = new ArrayList<CheckForbiddenHook>();
 
     /**
-     * sendKernelImpl 方法内 mQClientFactory.getMQClientAPIImpl().sendMessage 发送消息前置后置处理回调接口
+     * sendKernelImpl 方法内 MQClientInstance.getMQClientAPIImpl().sendMessage 发送消息前置后置处理回调接口
      */
     private final ArrayList<SendMessageHook> sendMessageHookList = new ArrayList<SendMessageHook>();
 
     /**
-     * 如果消息大于 DefaultMQProducer.compressMsgBodyOverHowmuch 解压级别
+     * 如果消息大于 DefaultMQProducer.compressMsgBodyOverHowmuch 压缩消息等级
      */
     private int zipCompressLevel = Integer.parseInt(System.getProperty(MixAll.MESSAGE_COMPRESS_LEVEL, "5"));
 
     /**
-     * MQFaultStrategy.selectOneMessageQueue 从TopicPublishInfo【Topic发送路由信息】 选择一个消息队列
-     * 可以通过 setSendLatencyFaultEnable 方法设置选择路由支持延迟容错开关，这样可以选择延迟最低 MessageQueue
+     * MQFaultStrategy通过selectOneMessageQueue方法实现了从TopicPublishInfo【Topic发送路由信息】选择一个延时最低消息队列MessageQueue
+     * setSendLatencyFaultEnable=true 时开启
      */
     private MQFaultStrategy mqFaultStrategy = new MQFaultStrategy();
 
@@ -295,7 +295,6 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     /**************** DefaultMQProducerImpl启动关闭结束 ****************/
     /**
      * 获取事务消息回调监听
-     *
      * @return
      */
     @Override
@@ -1371,7 +1370,7 @@ public class DefaultMQProducerImpl implements MQProducerInner {
     }
 
     /**
-     * 获取topic 发送路由信息。且路由信息中可以找到MessageQueue
+     * 获取topic 发送路由信息是否更新
      *
      * @param topic
      * @return

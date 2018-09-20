@@ -22,29 +22,53 @@ import org.apache.rocketmq.common.message.MessageExt;
 import org.apache.rocketmq.common.protocol.header.CheckTransactionStateRequestHeader;
 
 /**
- * 消息生产者内部实现
- *
- * 1 消息生成者发送消息必须知道发送消息topic 路由信息
  *
  */
 public interface MQProducerInner {
 
     /**
-     *
+     * 获取所有发送topic
      * @return
      */
     Set<String> getPublishTopicList();
 
+    /**
+     * 获取topic 发送路由信息是否更新
+     * 1 我们在发送消息时会添加一个 new TopicPublishInfo()【没有messageQueue为】
+     * 2 获取到路由信息时更新添加 messageQueue
+     * @param topic
+     * @return
+     */
     boolean isPublishTopicNeedUpdate(final String topic);
 
+    /**
+     * 获取事务消息回调监听
+     * @return
+     */
     TransactionCheckListener checkListener();
 
+    /**
+     * 检查消息事务的状态
+     * @param addr
+     * @param msg
+     * @param checkRequestHeader
+     */
     void checkTransactionState(
         final String addr,
         final MessageExt msg,
         final CheckTransactionStateRequestHeader checkRequestHeader);
 
+    /**
+     * 更新topic对应的路由信息
+     * MQClientInstance.updateTopicRouteInfoFromNameServer 定时从nameSrv获取路由信息时同步
+     * @param topic
+     * @param info
+     */
     void updateTopicPublishInfo(final String topic, final TopicPublishInfo info);
 
+    /**
+     * 是否是单元
+     * @return
+     */
     boolean isUnitMode();
 }
