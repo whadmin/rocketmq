@@ -40,43 +40,25 @@ import org.apache.rocketmq.remoting.RPCHook;
 import org.apache.rocketmq.remoting.exception.RemotingException;
 
 /**
- * In most scenarios, this is the mostly recommended class to consume messages.
- * </p>
  *
- * Technically speaking, this push client is virtually a wrapper of the underlying pull service. Specifically, on
- * arrival of messages pulled from brokers, it roughly invokes the registered callback handler to feed the messages.
- * </p>
- *
- * See quickstart/Consumer in the example module for a typical usage.
- * </p>
- *
- * <p>
- * <strong>Thread Safety:</strong> After initialization, the instance can be regarded as thread-safe.
- * </p>
  */
 public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsumer {
 
     /**
-     * MQPush内部内部核心实现类。, DefaultMQPushConsumer大多数功能都委托给处理执行。
+     * MQPush内部内部核心实现类。, DefaultMQPushConsumer大多数功能都委托给其处理执行。
      */
     protected final transient DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
 
     /**
-     * 消费者组名，必须设置
-     * 具有相同角色的消费者需要具有完全相同的订阅和consumerGroup才能正确实现*负载平衡
+     * 消费者组名，聚合了所有完全相同角色的消费者实例
      */
     private String consumerGroup;
 
     /**
      * 消息模型定义消息如何传递给每个消费者客户端的方式。
-     * </p>
-     *
      * RocketMQ支持两种消息模型：集群和广播,
      * 集群：具有*相同{@link #consumerGroup}的消费者客户端,
      * 相反，如果设置了广播，则每个消费者客户端将分别消费所有订阅的消息*。
-     * </p>
-     *
-     * This field defaults to clustering.
      */
     private MessageModel messageModel = MessageModel.CLUSTERING;
 

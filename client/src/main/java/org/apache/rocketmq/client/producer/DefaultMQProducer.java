@@ -39,33 +39,25 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.apache.rocketmq.remoting.netty.NettyRemotingClient;
 
 /**
- * DefaultMQProducer 这个类是客户端应用程序API路口类.
- * <p>
+ * DefaultMQProducer 这个类是Producer客户端应用程序API路口类.
  * DefaultMQProducer 负责处理发送同步消息,单向消息,异步消息，三种方式的消息, 以及连续的消息是否保证顺序消息【指定MessageQueueSelector或MessageQueue】，是否批量消息
- * <p>
- * 客户端通过 下面4个步骤发完消息的发送
- * <p>
- * 创建 DefaultMQProducer defaultMQProducer=new DefaultMQProducer()
- * <p>
- * 配置 DefaultMQProducer.setXXX()
- * <p>
- * 初始化 producer.start()
- * <p>
- * 发送消息  producer.send(msg)
- * <p>
+ * 1 客户端通过 下面4个步骤发完消息的发送
+     * 创建 DefaultMQProducer defaultMQProducer=new DefaultMQProducer()
+     * 配置 DefaultMQProducer.setXXX()
+     * 初始化 producer.start()
+     * 发送消息  producer.send(msg)
  * 2 DefaultMQProducer发送消息的核心实现交由DefaultMQProducerImpl去实现【Producer核心类】
- * <p>
  * 3 DefaultMQProducer是ClientConfig的子类（提供了针对Producer配置）
  */
 public class DefaultMQProducer extends ClientConfig implements MQProducer {
 
     /**
-     * 将内部实现封装到这个类中几乎所有的方法。
+     * MQProducer内部内部核心实现类, DefaultMQProducer大多数功能都委托给其处理执行
      */
     protected final transient DefaultMQProducerImpl defaultMQProducerImpl;
 
     /**
-     * 生产者组概念性地聚合了所有完全相同角色的生产者实例
+     * 生产者组:聚合了所有完全相同角色的生产者实例
      */
     private String producerGroup;
 
@@ -611,9 +603,7 @@ public class DefaultMQProducer extends ClientConfig implements MQProducer {
     /*********************  其他接口结束   *********************/
 
     /**
-     * Sets an Executor to be used for executing callback methods.
-     * If the Executor is not set, {@link NettyRemotingClient#publicExecutor} will be used.
-     *
+     * 注册一个线程池,异步处理 InvokeCallback
      * @param callbackExecutor the instance of Executor
      */
     public void setCallbackExecutor(final ExecutorService callbackExecutor) {
