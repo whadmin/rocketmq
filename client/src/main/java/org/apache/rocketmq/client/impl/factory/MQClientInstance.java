@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.rocketmq.client.ClientConfig;
 import org.apache.rocketmq.client.admin.MQAdminExtInner;
 import org.apache.rocketmq.client.exception.MQBrokerException;
@@ -84,14 +85,14 @@ import org.slf4j.Logger;
 
 /**
  * MQClientInstance 服务于如下4个角色 RPC远程调用客户端通用实现
- *
+ * <p>
  * DefaultMQAdminExtImpl            运维系统Admin
  * DefaultMQProducerImpl            生成消息Producer
  * DefaultMQPushConsumerImpl        推送消息Consumer
  * DefaultMQPullConsumerImpl        拉取消息Consumer
- *
+ * <p>
  * MQClientInstance 通过 MQClientManager工厂对象创建，每一个JVM内部客户端ID相同的MQClientInstance是复用的
-
+ * <p>
  * MQClientInstance 对象可以给同时给多个DefaultMQProducerImpl,DefaultMQPushConsumerImpl，DefaultMQPullConsumerImpl
  */
 public class MQClientInstance {
@@ -258,12 +259,11 @@ public class MQClientInstance {
         this.consumerStatsManager = new ConsumerStatsManager(this.scheduledExecutorService);
 
         log.info("Created a new client Instance, InstanceIndex:{}, ClientID:{}, ClientConfig:{}, ClientVersion:{}, SerializerType:{}",
-            this.instanceIndex,
-            this.clientId,
-            this.clientConfig,
-            MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
+                this.instanceIndex,
+                this.clientId,
+                this.clientConfig,
+                MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION), RemotingCommand.getSerializeTypeConfigInThisServer());
     }
-
 
 
     public void start() throws MQClientException {
@@ -358,10 +358,12 @@ public class MQClientInstance {
             }, 1000 * 10, 1000 * 60 * 2, TimeUnit.MILLISECONDS);
         }
         /**
-         * 定时从NamerServer获取所有使用当前对象作为客户端【MQConsumerInner,MQProducerInner】订阅关注topic对应的路由信息
-         * 更新brokerAddrTable,topicRouteTable
-         * 更新所有MQProducerInner.topicPublishInfoTable
-         * 更新所有ConsumerInner.rebalanceImpl.topicSubscribeInfoTable
+         * 从NamerServer 获取topic对应的路由信息topicRouteData
+         * 1 更新brokerAddrTable
+         * 2 topicRouteData转换成TopicPublishInfo 更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable
+         * 3 获取topicRouteData路由信息中可以读取MessageQueue数量,创建MessageQueue添加到Set<MessageQueue> mqList集合类
+         *   更新同步到所有使用当前对象作为客户端ConsumerInner.rebalanceImpl.topicSubscribeInfoTable
+         * 4 更新topicRouteTable
          */
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
@@ -420,8 +422,12 @@ public class MQClientInstance {
 
     /*************************** 从NamerServer 获取topic对应的路由信息star  ***************************/
     /**
-     * 定时从NamerServer获取所有使用当前对象作为客户端【MQConsumerInner,MQProducerInne】订阅关注topic对应的路由信息
-     * 更新
+     * 从NamerServer 获取topic对应的路由信息topicRouteData
+     * 1 更新brokerAddrTable
+     * 2 topicRouteData转换成TopicPublishInfo 更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable
+     * 3 获取topicRouteData路由信息中可以读取MessageQueue数量,创建MessageQueue添加到Set<MessageQueue> mqList集合类
+     *   更新同步到所有使用当前对象作为客户端ConsumerInner.rebalanceImpl.topicSubscribeInfoTable
+     * 4 更新topicRouteTable
      */
     public void updateTopicRouteInfoFromNameServer() {
         Set<String> topicList = new HashSet<String>();
@@ -464,7 +470,12 @@ public class MQClientInstance {
 
     /**
      * 从NamerServer 获取topic对应的路由信息topicRouteData
-     * @param topic   获取的路由的topic
+     * 1 更新brokerAddrTable
+     * 2 topicRouteData转换成TopicPublishInfo 更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable
+     * 3 获取topicRouteData路由信息中可以读取MessageQueue数量,创建MessageQueue添加到Set<MessageQueue> mqList集合类
+     *   更新同步到所有使用当前对象作为客户端ConsumerInner.rebalanceImpl.topicSubscribeInfoTable
+     * 4 更新topicRouteTable
+     * @param topic 获取的路由的topic
      * @return
      */
     public boolean updateTopicRouteInfoFromNameServer(final String topic) {
@@ -473,13 +484,18 @@ public class MQClientInstance {
 
     /**
      * 从NamerServer 获取topic对应的路由信息topicRouteData
-     * @param topic      获取的路由的topic
-     * @param isDefault  是否是获取默认topic
-     * @param defaultMQProducer   获取默认topic对应的defaultMQProducer
+     * 1 更新brokerAddrTable
+     * 2 topicRouteData转换成TopicPublishInfo 更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable
+     * 3 获取topicRouteData路由信息中可以读取MessageQueue数量,创建MessageQueue添加到Set<MessageQueue> mqList集合类
+     *   更新同步到所有使用当前对象作为客户端ConsumerInner.rebalanceImpl.topicSubscribeInfoTable
+     * 4 更新topicRouteTable
+     * @param topic             获取的路由的topic
+     * @param isDefault         是否是获取默认topic
+     * @param defaultMQProducer 获取默认topic对应的defaultMQProducer
      * @return
      */
     public boolean updateTopicRouteInfoFromNameServer(final String topic, boolean isDefault,
-        DefaultMQProducer defaultMQProducer) {
+                                                      DefaultMQProducer defaultMQProducer) {
         try {
             if (this.lockNamesrv.tryLock(LOCK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
                 try {
@@ -487,7 +503,7 @@ public class MQClientInstance {
                     //获取默认topic路由信息
                     if (isDefault && defaultMQProducer != null) {
                         topicRouteData = this.mQClientAPIImpl.getDefaultTopicRouteInfoFromNameServer(defaultMQProducer.getCreateTopicKey(),
-                            1000 * 3);
+                                1000 * 3);
                         if (topicRouteData != null) {
                             for (QueueData data : topicRouteData.getQueueDatas()) {
                                 int queueNums = Math.min(defaultMQProducer.getDefaultTopicQueueNums(), data.getReadQueueNums());
@@ -583,9 +599,10 @@ public class MQClientInstance {
     }
 
     /**
-     *  topicRouteData转换成TopicPublishInfo
-     *  TopicPublishInfo 表示给MQProducerInner使用topic路由信息
-     *  我们会把转换获取TopicPublishInfo更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable】
+     * topicRouteData转换成TopicPublishInfo
+     * TopicPublishInfo 表示给MQProducerInner使用topic路由信息
+     * 我们会把转换获取TopicPublishInfo更新同步到所有使用当前对象作为客户端MQProducerInner.topicPublishInfoTable】
+     *
      * @param topic
      * @param route
      * @return
@@ -647,6 +664,7 @@ public class MQClientInstance {
     /**
      * 获取topicRouteData路由信息中可以读取MessageQueue数量,创建MessageQueue添加到Set<MessageQueue> mqList集合类
      * 我们会把获取mqList集合类 添加到  MQConsumerInner.rebalanceImpl.getTopicSubscribeInfoTable()
+     *
      * @param topic
      * @param route
      * @return
@@ -734,6 +752,17 @@ public class MQClientInstance {
     /*************************** 移除离线的broker end  ***************************/
 
     /*************************** 定时向broker发送心跳star  ***************************/
+    /**
+     * 1 定时获取MQClientInstance.brokerAddrTable【客户端连接broker地址】
+     * （MQClientInstance.brokerAddrTable 数据来源于定时从NamerServer获取所有使用当前对象作为客户端【MQConsumerInner,MQProducerInner】订阅关注topic对应的路由信息）
+     * <p>
+     * 2 获取使用当前对象作为客户端的MQConsumerInner，MQProducerInner构建HeartbeatData心跳数据包，发送给所有连接broker，更新brokerVersionTable
+     * <p>
+     * 3 上传所有使用当前对象作为客户端,满足如下条件的MQConsumerInner 到FilterServer
+     * <p>
+     * 1 满足将订阅方式为ConsumeType.CONSUME_PASSIVELY，
+     * 2 满足需要支持规则过滤的
+     */
     public void sendHeartbeatToAllBrokerWithLock() {
         if (this.lockHeartbeat.tryLock()) {
             try {
@@ -749,6 +778,10 @@ public class MQClientInstance {
         }
     }
 
+    /**
+     * 获取使用当前对象作为客户端的MQConsumerInner，MQProducerInner构建HeartbeatData心跳数据包，
+     * 发送给所有连接broker，更新brokerVersionTable
+     */
     private void sendHeartbeatToAllBroker() {
         //构建HeartbeatData：心跳数据包
         final HeartbeatData heartbeatData = this.prepareHeartbeatData();
@@ -760,9 +793,9 @@ public class MQClientInstance {
             return;
         }
 
-        //获取MQClientInstance需要连接brokerAddr地址信息
+        //从brokerAddrTable 获取MQClientInstance需要连接所有brokerAddr地址信息发送心跳
         if (!this.brokerAddrTable.isEmpty()) {
-            //发送心跳包的次数
+            //发送心跳包的次数+1
             long times = this.sendHeartbeatTimesTotal.getAndIncrement();
             Iterator<Entry<String, HashMap<Long, String>>> it = this.brokerAddrTable.entrySet().iterator();
             while (it.hasNext()) {
@@ -783,11 +816,12 @@ public class MQClientInstance {
                             }
 
                             try {
-                                //发送心跳 broker ClientManageProcessor处理
+                                //发送心跳 broker broker ClientManageProcessor处理
                                 int version = this.mQClientAPIImpl.sendHearbeat(addr, heartbeatData, 3000);
                                 if (!this.brokerVersionTable.containsKey(brokerName)) {
                                     this.brokerVersionTable.put(brokerName, new HashMap<String, Integer>(4));
                                 }
+                                //更新brokerVersionTable
                                 this.brokerVersionTable.get(brokerName).put(addr, version);
                                 if (times % 20 == 0) {
                                     log.info("send heart beat to broker[{} {} {}] success", brokerName, id, addr);
@@ -810,6 +844,7 @@ public class MQClientInstance {
 
     /**
      * 构建HeartbeatData：心跳数据包
+     *
      * @return
      */
     private HeartbeatData prepareHeartbeatData() {
@@ -848,6 +883,11 @@ public class MQClientInstance {
         return heartbeatData;
     }
 
+    /**
+     * 上传所有使用当前对象作为客户端,满足如下条件的MQConsumerInner 到FilterServer
+     * 1 满足将订阅方式为ConsumeType.CONSUME_PASSIVELY，
+     * 2 满足需要支持规则过滤的
+     */
     private void uploadFilterClassSource() {
         Iterator<Entry<String, MQConsumerInner>> it = this.consumerTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -871,6 +911,56 @@ public class MQClientInstance {
             }
         }
     }
+
+    /**
+     * 上传需要支持TAG过滤的consumer到FilterServer
+     * @param consumerGroup     分组
+     * @param fullClassName     TAG规则
+     * @param topic             topic
+     * @param filterClassSource fileter规则
+     * @throws UnsupportedEncodingException
+     */
+    private void uploadFilterClassToAllFilterServer(final String consumerGroup, final String fullClassName,
+                                                    final String topic,
+                                                    final String filterClassSource) throws UnsupportedEncodingException {
+        byte[] classBody = null;
+        int classCRC = 0;
+        try {
+            classBody = filterClassSource.getBytes(MixAll.DEFAULT_CHARSET);
+            classCRC = UtilAll.crc32(classBody);
+        } catch (Exception e1) {
+            log.warn("uploadFilterClassToAllFilterServer Exception, ClassName: {} {}",
+                    fullClassName,
+                    RemotingHelper.exceptionSimpleDesc(e1));
+        }
+
+        TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
+        if (topicRouteData != null
+                && topicRouteData.getFilterServerTable() != null && !topicRouteData.getFilterServerTable().isEmpty()) {
+            Iterator<Entry<String, List<String>>> it = topicRouteData.getFilterServerTable().entrySet().iterator();
+            while (it.hasNext()) {
+                Entry<String, List<String>> next = it.next();
+                List<String> value = next.getValue();
+                for (final String fsAddr : value) {
+                    try {
+                        this.mQClientAPIImpl.registerMessageFilterClass(fsAddr, consumerGroup, topic, fullClassName, classCRC, classBody,
+                                5000);
+
+                        log.info("register message class filter to {} OK, ConsumerGroup: {} Topic: {} ClassName: {}", fsAddr, consumerGroup,
+                                topic, fullClassName);
+
+                    } catch (Exception e) {
+                        log.error("uploadFilterClassToAllFilterServer Exception", e);
+                    }
+                }
+            }
+        } else {
+            log.warn("register message class filter failed, because no filter server, ConsumerGroup: {} Topic: {} ClassName: {}",
+                    consumerGroup, topic, fullClassName);
+        }
+    }
+
+    /*************************** 定时向broker发送心跳end  ***************************/
 
 
     private void persistAllConsumerOffset() {
@@ -900,7 +990,6 @@ public class MQClientInstance {
     }
 
 
-
     private boolean isBrokerInNameServer(final String brokerAddr) {
         Iterator<Entry<String, TopicRouteData>> it = this.topicRouteTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -916,45 +1005,6 @@ public class MQClientInstance {
         return false;
     }
 
-    private void uploadFilterClassToAllFilterServer(final String consumerGroup, final String fullClassName,
-        final String topic,
-        final String filterClassSource) throws UnsupportedEncodingException {
-        byte[] classBody = null;
-        int classCRC = 0;
-        try {
-            classBody = filterClassSource.getBytes(MixAll.DEFAULT_CHARSET);
-            classCRC = UtilAll.crc32(classBody);
-        } catch (Exception e1) {
-            log.warn("uploadFilterClassToAllFilterServer Exception, ClassName: {} {}",
-                fullClassName,
-                RemotingHelper.exceptionSimpleDesc(e1));
-        }
-
-        TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
-        if (topicRouteData != null
-            && topicRouteData.getFilterServerTable() != null && !topicRouteData.getFilterServerTable().isEmpty()) {
-            Iterator<Entry<String, List<String>>> it = topicRouteData.getFilterServerTable().entrySet().iterator();
-            while (it.hasNext()) {
-                Entry<String, List<String>> next = it.next();
-                List<String> value = next.getValue();
-                for (final String fsAddr : value) {
-                    try {
-                        this.mQClientAPIImpl.registerMessageFilterClass(fsAddr, consumerGroup, topic, fullClassName, classCRC, classBody,
-                            5000);
-
-                        log.info("register message class filter to {} OK, ConsumerGroup: {} Topic: {} ClassName: {}", fsAddr, consumerGroup,
-                            topic, fullClassName);
-
-                    } catch (Exception e) {
-                        log.error("uploadFilterClassToAllFilterServer Exception", e);
-                    }
-                }
-            }
-        } else {
-            log.warn("register message class filter failed, because no filter server, ConsumerGroup: {} Topic: {} ClassName: {}",
-                consumerGroup, topic, fullClassName);
-        }
-    }
 
     private boolean topicRouteDataIsChange(TopicRouteData olddata, TopicRouteData nowdata) {
         if (olddata == null || nowdata == null)
@@ -1037,6 +1087,20 @@ public class MQClientInstance {
         }
     }
 
+    public boolean registerAdminExt(final String group, final MQAdminExtInner admin) {
+        if (null == group || null == admin) {
+            return false;
+        }
+
+        MQAdminExtInner prev = this.adminExtTable.putIfAbsent(group, admin);
+        if (prev != null) {
+            log.warn("the admin group[{}] exist already.", group);
+            return false;
+        }
+
+        return true;
+    }
+
     public boolean registerConsumer(final String group, final MQConsumerInner consumer) {
         if (null == group || null == consumer) {
             return false;
@@ -1051,9 +1115,40 @@ public class MQClientInstance {
         return true;
     }
 
+    public boolean registerProducer(final String group, final DefaultMQProducerImpl producer) {
+        if (null == group || null == producer) {
+            return false;
+        }
+
+        MQProducerInner prev = this.producerTable.putIfAbsent(group, producer);
+        if (prev != null) {
+            log.warn("the producer group[{}] exist already.", group);
+            return false;
+        }
+
+        return true;
+    }
+
+    public MQProducerInner selectProducer(final String group) {
+        return this.producerTable.get(group);
+    }
+
+    public MQConsumerInner selectConsumer(final String group) {
+        return this.consumerTable.get(group);
+    }
+
+    public void unregisterAdminExt(final String group) {
+        this.adminExtTable.remove(group);
+    }
+
     public void unregisterConsumer(final String group) {
         this.consumerTable.remove(group);
         this.unregisterClientWithLock(null, group);
+    }
+
+    public void unregisterProducer(final String group) {
+        this.producerTable.remove(group);
+        this.unregisterClientWithLock(group, null);
     }
 
     private void unregisterClientWithLock(final String producerGroup, final String consumerGroup) {
@@ -1101,42 +1196,6 @@ public class MQClientInstance {
         }
     }
 
-    public boolean registerProducer(final String group, final DefaultMQProducerImpl producer) {
-        if (null == group || null == producer) {
-            return false;
-        }
-
-        MQProducerInner prev = this.producerTable.putIfAbsent(group, producer);
-        if (prev != null) {
-            log.warn("the producer group[{}] exist already.", group);
-            return false;
-        }
-
-        return true;
-    }
-
-    public void unregisterProducer(final String group) {
-        this.producerTable.remove(group);
-        this.unregisterClientWithLock(group, null);
-    }
-
-    public boolean registerAdminExt(final String group, final MQAdminExtInner admin) {
-        if (null == group || null == admin) {
-            return false;
-        }
-
-        MQAdminExtInner prev = this.adminExtTable.putIfAbsent(group, admin);
-        if (prev != null) {
-            log.warn("the admin group[{}] exist already.", group);
-            return false;
-        }
-
-        return true;
-    }
-
-    public void unregisterAdminExt(final String group) {
-        this.adminExtTable.remove(group);
-    }
 
     public void rebalanceImmediately() {
         this.rebalanceService.wakeup();
@@ -1155,13 +1214,6 @@ public class MQClientInstance {
         }
     }
 
-    public MQProducerInner selectProducer(final String group) {
-        return this.producerTable.get(group);
-    }
-
-    public MQConsumerInner selectConsumer(final String group) {
-        return this.consumerTable.get(group);
-    }
 
     public FindBrokerResult findBrokerAddressInAdmin(final String brokerName) {
         String brokerAddr = null;
@@ -1195,6 +1247,7 @@ public class MQClientInstance {
 
     /**
      * 获取brokerName 中 master broker对应地址
+     *
      * @param brokerName
      * @return
      */
@@ -1208,9 +1261,9 @@ public class MQClientInstance {
     }
 
     public FindBrokerResult findBrokerAddressInSubscribe(
-        final String brokerName,
-        final long brokerId,
-        final boolean onlyThisBroker
+            final String brokerName,
+            final long brokerId,
+            final boolean onlyThisBroker
     ) {
         String brokerAddr = null;
         boolean slave = false;
@@ -1264,17 +1317,25 @@ public class MQClientInstance {
         return null;
     }
 
+    /**
+     * 随机获取存储topic broker地址
+     * @param topic
+     * @return
+     */
     public String findBrokerAddrByTopic(final String topic) {
+        //获取topic路由信息
         TopicRouteData topicRouteData = this.topicRouteTable.get(topic);
         if (topicRouteData != null) {
+            //获取所有存储topic broker节点
             List<BrokerData> brokers = topicRouteData.getBrokerDatas();
             if (!brokers.isEmpty()) {
+                //随机读取一个节点
                 int index = random.nextInt(brokers.size());
                 BrokerData bd = brokers.get(index % brokers.size());
+                //获取节点中随机一台broker实体机器地址
                 return bd.selectBrokerAddr();
             }
         }
-
         return null;
     }
 
@@ -1372,8 +1433,8 @@ public class MQClientInstance {
     }
 
     public ConsumeMessageDirectlyResult consumeMessageDirectly(final MessageExt msg,
-        final String consumerGroup,
-        final String brokerName) {
+                                                               final String consumerGroup,
+                                                               final String brokerName) {
         MQConsumerInner mqConsumerInner = this.consumerTable.get(consumerGroup);
         if (null != mqConsumerInner) {
             DefaultMQPushConsumerImpl consumer = (DefaultMQPushConsumerImpl) mqConsumerInner;
@@ -1403,7 +1464,7 @@ public class MQClientInstance {
         consumerRunningInfo.getProperties().put(ConsumerRunningInfo.PROP_NAMESERVER_ADDR, nsAddr);
         consumerRunningInfo.getProperties().put(ConsumerRunningInfo.PROP_CONSUME_TYPE, mqConsumerInner.consumeType().name());
         consumerRunningInfo.getProperties().put(ConsumerRunningInfo.PROP_CLIENT_VERSION,
-            MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION));
+                MQVersion.getVersionDesc(MQVersion.CURRENT_VERSION));
 
         return consumerRunningInfo;
     }
