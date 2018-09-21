@@ -57,170 +57,131 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     /**
      * 消息模型定义消息如何传递给每个消费者客户端的方式。
      * RocketMQ支持两种消息模型：集群和广播,
-     * 集群：具有*相同{@link #consumerGroup}的消费者客户端,
-     * 相反，如果设置了广播，则每个消费者客户端将分别消费所有订阅的消息*。
+     * 集群：一条消费会给订阅消息中具有*相同{@link #consumerGroup}的消费者客户端中一个消费
+     * 广播：一条消费会给订阅消息中所有具有*相同{@link #consumerGroup}的消费者客户端中消费
      */
     private MessageModel messageModel = MessageModel.CLUSTERING;
 
     /**
-     * Consuming point on consumer booting.
-     * </p>
-     *
-     * There are three consuming points:
-     * <ul>
-     * <li>
-     * <code>CONSUME_FROM_LAST_OFFSET</code>: consumer clients pick up where it stopped previously.
-     * If it were a newly booting up consumer client, according aging of the consumer group, there are two
-     * cases:
-     * <ol>
-     * <li>
-     * if the consumer group is created so recently that the earliest message being subscribed has yet
-     * expired, which means the consumer group represents a lately launched business, consuming will
-     * start from the very beginning;
-     * </li>
-     * <li>
-     * if the earliest message being subscribed has expired, consuming will start from the latest
-     * messages, meaning messages born prior to the booting timestamp would be ignored.
-     * </li>
-     * </ol>
-     * </li>
-     * <li>
-     * <code>CONSUME_FROM_FIRST_OFFSET</code>: Consumer client will start from earliest messages available.
-     * </li>
-     * <li>
-     * <code>CONSUME_FROM_TIMESTAMP</code>: Consumer client will start from specified timestamp, which means
-     * messages born prior to {@link #consumeTimestamp} will be ignored
-     * </li>
-     * </ul>
+     * 消费者消费策略
+         //默认策略，从该队列最尾开始消费，即跳过历史消息
+         CONSUME_FROM_LAST_OFFSET,
+         //从队列最开始开始消费，即历史消息（还储存在broker的）全部消费一遍
+         CONSUME_FROM_FIRST_OFFSET,
+         //从某个时间点开始消费，和setConsumeTimestamp()配合使用，默认是半个小时以前
+         CONSUME_FROM_TIMESTAMP,
      */
     private ConsumeFromWhere consumeFromWhere = ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET;
 
     /**
-     * Backtracking consumption time with second precision. Time format is
-     * 20131223171201<br>
-     * Implying Seventeen twelve and 01 seconds on December 23, 2013 year<br>
-     * Default backtracking consumption time Half an hour ago.
+     * 以第二精度回溯消耗时间。, 时间格式是* 20131223171201 <br> *暗示2013年12月23日的十七和十二秒01年*默认回溯消费时间半小时前。
      */
     private String consumeTimestamp = UtilAll.timeMillisToHumanString3(System.currentTimeMillis() - (1000 * 60 * 30));
 
     /**
-     * Queue allocation algorithm specifying how message queues are allocated to each consumer clients.
+     * 队列分配算法，指定如何将消息队列分配给每个使用者客户端。
      */
     private AllocateMessageQueueStrategy allocateMessageQueueStrategy;
 
     /**
-     * Subscription relationship
+     * 订阅关系【订阅规则】
      */
     private Map<String /* topic */, String /* sub expression */> subscription = new HashMap<String, String>();
 
     /**
-     * Message listener
+     * 消息监听器
      */
     private MessageListener messageListener;
 
     /**
-     * Offset Storage
+     * 消费到进度
+     * 集群:RemoteBrokerOffsetStore
+     * 广播:LocalFileOffsetStore
      */
     private OffsetStore offsetStore;
 
     /**
-     * Minimum consumer thread number
+     * 最小消费者线程数
      */
     private int consumeThreadMin = 20;
 
     /**
-     * Max consumer thread number
+     * 最大消费者线程数
      */
     private int consumeThreadMax = 64;
 
     /**
-     * Threshold for dynamic adjustment of the number of thread pool
+     * 动态调整线程池数量的阈值
      */
     private long adjustThreadPoolNumsThreshold = 100000;
 
     /**
-     * Concurrently max span offset.it has no effect on sequential consumption
+     * 同时最大跨度offset.it对顺序消耗没有影响
      */
     private int consumeConcurrentlyMaxSpan = 2000;
 
     /**
-     * Flow control threshold on queue level, each message queue will cache at most 1000 messages by default,
-     * Consider the {@code pullBatchSize}, the instantaneous value may exceed the limit
+     * 队列级别的流量控制阈值，默认情况下每个消息队列最多会缓存1000条消息，*考虑{@code pullBatchSize}，瞬时值可能超过限制
      */
     private int pullThresholdForQueue = 1000;
 
     /**
-     * Limit the cached message size on queue level, each message queue will cache at most 100 MiB messages by default,
-     * Consider the {@code pullBatchSize}, the instantaneous value may exceed the limit
-     *
-     * <p>
-     * The size of a message only measured by message body, so it's not accurate
+     * 在队列级别限制缓存的邮件大小，默认情况下每个邮件队列将缓存最多100条MiB邮件，*考虑{@code pullBatchSize}，瞬时值可能超出限制
+     * 邮件大小仅由邮件正文测量，因此不准确
      */
     private int pullThresholdSizeForQueue = 100;
 
     /**
-     * Flow control threshold on topic level, default value is -1(Unlimited)
-     * <p>
-     * The value of {@code pullThresholdForQueue} will be overwrote and calculated based on
-     * {@code pullThresholdForTopic} if it is't unlimited
-     * <p>
-     * For example, if the value of pullThresholdForTopic is 1000 and 10 message queues are assigned to this consumer,
-     * then pullThresholdForQueue will be set to 100
+     * 主题级别的流量控制阈值，默认值为-1（无限制）* <p> * {@code pullThresholdForQueue}的值将被覆盖并基于*
+     * {@code pullThresholdForTopic}进行计算，如果它不是无限制的
+     * 例如，如果pullThresholdForTopic的值为1000并且为此使用者分配了10个消息队列，则将pullThresholdForQueue设置为100
      */
     private int pullThresholdForTopic = -1;
 
     /**
-     * Limit the cached message size on topic level, default value is -1 MiB(Unlimited)
-     * <p>
-     * The value of {@code pullThresholdSizeForQueue} will be overwrote and calculated based on
-     * {@code pullThresholdSizeForTopic} if it is't unlimited
-     * <p>
-     * For example, if the value of pullThresholdSizeForTopic is 1000 MiB and 10 message queues are
-     * assigned to this consumer, then pullThresholdSizeForQueue will be set to 100 MiB
+     * 限制主题级别的缓存消息大小，默认值为-1 MiB（无限制）
+     * {@code pullThresholdSizeForQueue}的值将被覆盖并基于* {@code pullThresholdSizeForTopic}计算，如果它不是无限制的,
+     * 例如，如果pullThresholdSizeForTopic的值为1000 MiB且10个消息队列被分配给此消费者，则pullThresholdSizeForQueue将设置为100 MiB
      */
     private int pullThresholdSizeForTopic = -1;
 
     /**
-     * Message pull Interval
+     * 消息拉间隔
      */
     private long pullInterval = 0;
 
     /**
-     * Batch consumption size
+     * 批量消耗大小
      */
     private int consumeMessageBatchMaxSize = 1;
 
     /**
-     * Batch pull size
+     * 批量拉动大小
      */
     private int pullBatchSize = 32;
 
     /**
-     * Whether update subscription relationship when every pull
+     * 每次拉动时是否更新订阅关系
      */
     private boolean postSubscriptionWhenPull = false;
 
     /**
-     * Whether the unit of subscription group
+     * 是否为订阅组的单位
      */
     private boolean unitMode = false;
 
     /**
-     * Max re-consume times. -1 means 16 times.
-     * </p>
-     *
-     * If messages are re-consumed more than {@link #maxReconsumeTimes} before success, it's be directed to a deletion
-     * queue waiting.
+     * 最大消耗时间。 , -1表示16次。 , * </ p> * *如果消息在成功之前被重新消耗超过{@link #maxReconsumeTimes}，则它将被定向到删除*队列等待。
      */
     private int maxReconsumeTimes = -1;
 
     /**
-     * Suspending pulling time for cases requiring slow pulling like flow-control scenario.
+     * 暂停需要缓慢拉动的情况的拉动时间，如流量控制方案。
      */
     private long suspendCurrentQueueTimeMillis = 1000;
 
     /**
-     * Maximum amount of time in minutes a message may block the consuming thread.
+     * 消息可能阻止使用线程的最长时间（以分钟为单位）。
      */
     private long consumeTimeout = 15;
 

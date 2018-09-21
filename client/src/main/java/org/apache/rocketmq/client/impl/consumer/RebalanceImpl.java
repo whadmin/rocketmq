@@ -216,6 +216,14 @@ public abstract class RebalanceImpl {
         }
     }
 
+    /**
+     * 均衡消息队列服务，负责分配当前 Consumer 可消费的消息队列( MessageQueue )
+     * 目前有三种情况情况下触发
+     * 1  RebalanceService 服务定时触发
+     * 2  RebalanceService 收到通知wakeup触发
+     * 3  Broker 通知 Consumer 加入 或 移除时，Consumer 响应通知，调用 rebalanceService#wakeup(...) 触发
+     * @param isOrder
+     */
     public void doRebalance(final boolean isOrder) {
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
@@ -328,6 +336,13 @@ public abstract class RebalanceImpl {
         }
     }
 
+    /**
+     * 当负载均衡时，更新 消息处理队列
+     * @param topic
+     * @param mqSet  负载均衡结果后的消息队列数组
+     * @param isOrder  是否顺序
+     * @return
+     */
     private boolean updateProcessQueueTableInRebalance(final String topic, final Set<MessageQueue> mqSet,
         final boolean isOrder) {
         boolean changed = false;
