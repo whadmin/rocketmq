@@ -338,6 +338,8 @@ public abstract class RebalanceImpl {
 
     /**
      * 当负载均衡时，更新 消息处理队列
+     * - 移除 在processQueueTable && 不存在于 mqSet 里的消息队列
+     * - 增加 不在processQueueTable && 存在于mqSet 里的消息队列
      * @param topic
      * @param mqSet  负载均衡结果后的消息队列数组
      * @param isOrder  是否顺序
@@ -354,6 +356,7 @@ public abstract class RebalanceImpl {
             ProcessQueue pq = next.getValue();
 
             if (mq.getTopic().equals(topic)) {
+                // 不包含的队列
                 if (!mqSet.contains(mq)) {
                     pq.setDropped(true);
                     if (this.removeUnnecessaryMessageQueue(mq, pq)) {
@@ -361,7 +364,9 @@ public abstract class RebalanceImpl {
                         changed = true;
                         log.info("doRebalance, {}, remove unnecessary mq, {}", consumerGroup, mq);
                     }
-                } else if (pq.isPullExpired()) {
+                }
+                // 队列拉取超时，进行清理
+                else if (pq.isPullExpired()) {
                     switch (this.consumeType()) {
                         case CONSUME_ACTIVELY:
                             break;
@@ -382,6 +387,7 @@ public abstract class RebalanceImpl {
         }
 
         List<PullRequest> pullRequestList = new ArrayList<PullRequest>();
+        // 增加 不在processQueueTable && 存在于mqSet 里的消息队列。
         for (MessageQueue mq : mqSet) {
             if (!this.processQueueTable.containsKey(mq)) {
                 if (isOrder && !this.lock(mq)) {
@@ -411,7 +417,7 @@ public abstract class RebalanceImpl {
                 }
             }
         }
-
+        // 发起消息拉取请求
         this.dispatchPullRequest(pullRequestList);
 
         return changed;

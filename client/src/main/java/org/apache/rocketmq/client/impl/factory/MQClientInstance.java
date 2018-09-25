@@ -1297,6 +1297,15 @@ public class MQClientInstance {
         return null;
     }
 
+    /**
+     * 查询brokerName节点中brokerId对应的物理地址，
+     * 如果onlyThisBroker=flase且参数传入brokerId对应物理地址不存在.
+     * 则可以选择brokerName节点中随机一台brokerId对应的物理地址返回
+     * @param brokerName  broker节点名称
+     * @param brokerId    broker节点ID
+     * @param onlyThisBroker  是否只获取brokerId对应的节点
+     * @return
+     */
     public FindBrokerResult findBrokerAddressInSubscribe(
             final String brokerName,
             final long brokerId,
@@ -1327,6 +1336,12 @@ public class MQClientInstance {
         return null;
     }
 
+    /**
+     * 查找某个broker地址的心跳版本
+     * @param brokerName
+     * @param brokerAddr
+     * @return
+     */
     public int findBrokerVersion(String brokerName, String brokerAddr) {
         if (this.brokerVersionTable.containsKey(brokerName)) {
             if (this.brokerVersionTable.get(brokerName).containsKey(brokerAddr)) {
@@ -1336,6 +1351,12 @@ public class MQClientInstance {
         return 0;
     }
 
+    /**
+     * 查询订阅topic，分组group对应客户端机器列表
+     * @param topic
+     * @param group
+     * @return
+     */
     public List<String> findConsumerIdList(final String topic, final String group) {
         String brokerAddr = this.findBrokerAddrByTopic(topic);
         if (null == brokerAddr) {

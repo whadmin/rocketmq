@@ -18,34 +18,43 @@
 package org.apache.rocketmq.common.protocol;
 
 public class RequestCode {
-
+    // Broker 发送消息
     public static final int SEND_MESSAGE = 10;
-
+    // Broker 订阅消息
     public static final int PULL_MESSAGE = 11;
-
+    // Broker 查询消息
     public static final int QUERY_MESSAGE = 12;
+    // Broker 查询Broker Offset
     public static final int QUERY_BROKER_OFFSET = 13;
+    // Broker 查询Consumer Offset
     public static final int QUERY_CONSUMER_OFFSET = 14;
+    // Broker 更新Consumer Offset
     public static final int UPDATE_CONSUMER_OFFSET = 15;
+    // Broker 更新或者增加一个Topic
     public static final int UPDATE_AND_CREATE_TOPIC = 17;
+    // Broker 获取所有Topic的配置（Slave和Namesrv都会向Master请求此配置）
     public static final int GET_ALL_TOPIC_CONFIG = 21;
+    // Broker 获取所有Topic配置（Slave和Namesrv都会向Master请求此配置
     public static final int GET_TOPIC_CONFIG_LIST = 22;
-
+    // Broker 获取所有Topic名称列表
     public static final int GET_TOPIC_NAME_LIST = 23;
-
+    // Broker 更新Broker上的配置
     public static final int UPDATE_BROKER_CONFIG = 25;
-
+    // Broker 获取Broker上的配置
     public static final int GET_BROKER_CONFIG = 26;
-
+    // Broker 触发Broker删除文件
     public static final int TRIGGER_DELETE_FILES = 27;
-
+    // Broker 获取Broker运行时信息
     public static final int GET_BROKER_RUNTIME_INFO = 28;
+    // Broker 根据时间查询队列的Offset
     public static final int SEARCH_OFFSET_BY_TIMESTAMP = 29;
+    // Broker 查询队列最大Offset
     public static final int GET_MAX_OFFSET = 30;
+    // Broker 查询队列最小Offset
     public static final int GET_MIN_OFFSET = 31;
-
+    // Broker 查询队列最早消息对应时间
     public static final int GET_EARLIEST_MSG_STORETIME = 32;
-
+    // Broker 根据消息ID来查询消息
     public static final int VIEW_MESSAGE_BY_ID = 33;
 
     public static final int HEART_BEAT = 34;

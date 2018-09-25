@@ -42,6 +42,14 @@ import org.apache.rocketmq.remoting.protocol.RemotingCommand;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 接收发送客户端的心跳,维护管理Client
+ *
+ * 如果客户端是Consumer
+ * 1
+ *
+ *
+ */
 public class ClientManageProcessor implements NettyRequestProcessor {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
     private final BrokerController brokerController;
@@ -71,6 +79,12 @@ public class ClientManageProcessor implements NettyRequestProcessor {
         return false;
     }
 
+    /**
+     * 处理客户端发送的心跳数据
+     * @param ctx
+     * @param request
+     * @return
+     */
     public RemotingCommand heartBeat(ChannelHandlerContext ctx, RemotingCommand request) {
         RemotingCommand response = RemotingCommand.createResponseCommand(null);
         HeartbeatData heartbeatData = HeartbeatData.decode(request.getBody(), HeartbeatData.class);
@@ -80,6 +94,7 @@ public class ClientManageProcessor implements NettyRequestProcessor {
             request.getLanguage(),
             request.getVersion()
         );
+
 
         for (ConsumerData data : heartbeatData.getConsumerDataSet()) {
             SubscriptionGroupConfig subscriptionGroupConfig =

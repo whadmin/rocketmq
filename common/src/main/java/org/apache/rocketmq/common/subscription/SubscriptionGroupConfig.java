@@ -19,17 +19,48 @@ package org.apache.rocketmq.common.subscription;
 
 import org.apache.rocketmq.common.MixAll;
 
+/**
+ * 用来描述Consumer分组在broker服务端应配置信息
+ */
 public class SubscriptionGroupConfig {
 
+    /**
+     * Consumer分组名称
+     */
     private String groupName;
 
+    /**
+     * 是否打开消费开关
+     * PullMessageProcessor.processRequest拉取消息
+     * 会通过此属性校验是否能够拉取消息
+     */
     private boolean consumeEnable = true;
+
+    /**
+     * 没有用了？
+     */
     private boolean consumeFromMinEnable = true;
 
+    /**
+     * 当前groupName是否允许广播消息
+     * PullMessageProcessor.processRequest拉取消息
+     * 会通过此属性校验
+     */
     private boolean consumeBroadcastEnable = true;
 
+    /**
+     * retryQueueNums 表示重试Topic messageQueue的数量
+     * 每一个Consumer分组都会在初始化的时候都会添加并订阅重试Topic
+     * MixAll.getRetryTopic(this.defaultMQPushConsumer.getConsumerGroup())
+     *
+     */
     private int retryQueueNums = 1;
 
+    /**
+     * 最大重试消费的次数
+     *Broker端通过校验判断，如果超过了最大重试消费次数则会将消息移至这里所说的死信队列
+     *MixAll.getDLQTopic(groupName)
+     */
     private int retryMaxTimes = 16;
 
     private long brokerId = MixAll.MASTER_ID;

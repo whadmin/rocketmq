@@ -31,12 +31,18 @@ import org.apache.rocketmq.remoting.protocol.RemotingSerializable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 管理每个和broker通讯Consumer订阅信息。
+ */
 public class SubscriptionGroupManager extends ConfigManager {
+
     private static final Logger log = LoggerFactory.getLogger(LoggerName.BROKER_LOGGER_NAME);
 
     private final ConcurrentMap<String, SubscriptionGroupConfig> subscriptionGroupTable =
         new ConcurrentHashMap<String, SubscriptionGroupConfig>(1024);
+
     private final DataVersion dataVersion = new DataVersion();
+
     private transient BrokerController brokerController;
 
     public SubscriptionGroupManager() {
@@ -48,6 +54,9 @@ public class SubscriptionGroupManager extends ConfigManager {
         this.init();
     }
 
+    /**
+     * 初始化系统默认
+     */
     private void init() {
         {
             SubscriptionGroupConfig subscriptionGroupConfig = new SubscriptionGroupConfig();
@@ -96,6 +105,10 @@ public class SubscriptionGroupManager extends ConfigManager {
         }
     }
 
+    /**
+     * 添加更新subscriptionGroupTable
+     * @param config
+     */
     public void updateSubscriptionGroupConfig(final SubscriptionGroupConfig config) {
         SubscriptionGroupConfig old = this.subscriptionGroupTable.put(config.getGroupName(), config);
         if (old != null) {
@@ -109,6 +122,10 @@ public class SubscriptionGroupManager extends ConfigManager {
         this.persist();
     }
 
+    /**
+     * 关闭groupName对应的消费开关
+     * @param groupName
+     */
     public void disableConsume(final String groupName) {
         SubscriptionGroupConfig old = this.subscriptionGroupTable.get(groupName);
         if (old != null) {
@@ -117,6 +134,13 @@ public class SubscriptionGroupManager extends ConfigManager {
         }
     }
 
+    /**
+     * 查询group分组名称对应消费配置
+     * 如果group分组名称是系统默认分组或开启brokerController.getBrokerConfig().isAutoCreateSubscriptionGroup()
+     * 则给group分组名称创建一个消费配置
+     * @param group
+     * @return
+     */
     public SubscriptionGroupConfig findSubscriptionGroupConfig(final String group) {
         SubscriptionGroupConfig subscriptionGroupConfig = this.subscriptionGroupTable.get(group);
         if (null == subscriptionGroupConfig) {

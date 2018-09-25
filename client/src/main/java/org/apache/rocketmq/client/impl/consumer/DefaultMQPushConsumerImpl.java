@@ -196,15 +196,21 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         this.offsetStore = offsetStore;
     }
 
+    /**
+     * 拉取消息
+     * @param pullRequest
+     */
     public void pullMessage(final PullRequest pullRequest) {
         final ProcessQueue processQueue = pullRequest.getProcessQueue();
         if (processQueue.isDropped()) {
             log.info("the pull request[{}] is dropped.", pullRequest.toString());
             return;
         }
-
+        // 设置队列最后拉取消息时间
         pullRequest.getProcessQueue().setLastPullTimestamp(System.currentTimeMillis());
 
+
+        // 判断consumer状态是否运行中。如果不是，则延迟拉取消息。
         try {
             this.makeSureStateOK();
         } catch (MQClientException e) {
