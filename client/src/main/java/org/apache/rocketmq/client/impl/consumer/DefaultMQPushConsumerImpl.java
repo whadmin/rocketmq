@@ -77,34 +77,102 @@ import org.apache.rocketmq.remoting.exception.RemotingException;
 import org.slf4j.Logger;
 
 public class DefaultMQPushConsumerImpl implements MQConsumerInner {
+
     /**
-     * Delay some time when exception occur
+     * 发生异常时延迟一段时间
      */
     private static final long PULL_TIME_DELAY_MILLS_WHEN_EXCEPTION = 3000;
+
     /**
-     * Flow control interval
+     * 流量控制间隔
      */
     private static final long PULL_TIME_DELAY_MILLS_WHEN_FLOW_CONTROL = 50;
+
     /**
-     * Delay some time when suspend pull service
+     * 暂停拉服务时延迟一段时间
      */
     private static final long PULL_TIME_DELAY_MILLS_WHEN_SUSPEND = 1000;
+
     private static final long BROKER_SUSPEND_MAX_TIME_MILLIS = 1000 * 15;
+
     private static final long CONSUMER_TIMEOUT_MILLIS_WHEN_SUSPEND = 1000 * 30;
+
+    /**
+     * log
+     */
     private final Logger log = ClientLogger.getLog();
+
+    /**
+     * defaultMQPushConsumer
+     */
     private final DefaultMQPushConsumer defaultMQPushConsumer;
+
+    /**
+     * 负载均衡MessageQueue队列服务实现
+     */
     private final RebalanceImpl rebalanceImpl = new RebalancePushImpl(this);
+
+    /**
+     * MQConsumerInner 本地过滤拉消息实现
+     * 提供给pullAPIWrapper 在拉取消息后对消息过滤
+     */
     private final ArrayList<FilterMessageHook> filterMessageHookList = new ArrayList<FilterMessageHook>();
+
+    /**
+     *
+     */
     private final long consumerStartTimestamp = System.currentTimeMillis();
+
+    /**
+     * MessageListener 消息监听前置处理
+     */
     private final ArrayList<ConsumeMessageHook> consumeMessageHookList = new ArrayList<ConsumeMessageHook>();
+
+    /**
+     * RPC回调钩子实现
+     */
     private final RPCHook rpcHook;
+
+    /**
+     * DefaultMQPushConsumerImpl 服务状态
+     */
     private volatile ServiceState serviceState = ServiceState.CREATE_JUST;
+
+    /**
+     * RPC客户端
+     */
     private MQClientInstance mQClientFactory;
+
+    /**
+     * 拉取消息实现
+     */
     private PullAPIWrapper pullAPIWrapper;
+    /**
+     * 是否暂停
+     */
     private volatile boolean pause = false;
+
+    /**
+     * 是否需要顺序消费
+     */
     private boolean consumeOrderly = false;
+
+    /**
+     * 消费消息业务回调监听
+     * MessageListenerConcurrently 普通消息监听
+     * MessageListenerOrderly      顺序消息监听
+     */
     private MessageListener messageListenerInner;
+
+    /**
+     * 消费进度管理
+     * 管理MQConsumerInner中所有MessageQueue消费进度
+     */
     private OffsetStore offsetStore;
+
+    /**
+     * 消费消息服务
+     */
     private ConsumeMessageService consumeMessageService;
     private long queueFlowControlTimes = 0;
     private long queueMaxSpanFlowControlTimes = 0;
@@ -555,6 +623,10 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /**
+     * 启动
+     * @throws MQClientException
+     */
     public synchronized void start() throws MQClientException {
         switch (this.serviceState) {
             case CREATE_JUST:
@@ -639,6 +711,14 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         this.mQClientFactory.checkClientInBroker();
         this.mQClientFactory.sendHeartbeatToAllBrokerWithLock();
         this.mQClientFactory.rebalanceImmediately();
+    }
+
+    /**
+     * 暂停
+     */
+    public void suspend() {
+        this.pause = true;
+        log.info("suspend this consumer, {}", this.defaultMQPushConsumer.getConsumerGroup());
     }
 
     private void checkConfig() throws MQClientException {
@@ -811,44 +891,16 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
-    private void copySubscription() throws MQClientException {
-        try {
-            Map<String, String> sub = this.defaultMQPushConsumer.getSubscription();
-            if (sub != null) {
-                for (final Map.Entry<String, String> entry : sub.entrySet()) {
-                    final String topic = entry.getKey();
-                    final String subString = entry.getValue();
-                    SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
-                        topic, subString);
-                    this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);
-                }
-            }
 
-            if (null == this.messageListenerInner) {
-                this.messageListenerInner = this.defaultMQPushConsumer.getMessageListener();
-            }
-
-            switch (this.defaultMQPushConsumer.getMessageModel()) {
-                case BROADCASTING:
-                    break;
-                case CLUSTERING:
-                    final String retryTopic = MixAll.getRetryTopic(this.defaultMQPushConsumer.getConsumerGroup());
-                    SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
-                        retryTopic, SubscriptionData.SUB_ALL);
-                    this.rebalanceImpl.getSubscriptionInner().put(retryTopic, subscriptionData);
-                    break;
-                default:
-                    break;
-            }
-        } catch (Exception e) {
-            throw new MQClientException("subscription exception", e);
-        }
-    }
 
     public MessageListener getMessageListenerInner() {
         return messageListenerInner;
     }
 
+    /**
+     * 从订阅关系获取所有抓住topic
+     * 从NamerServer 获取topic对应的路由信息topicRouteData
+     */
     private void updateTopicSubscribeInfoWhenSubscriptionChanged() {
         Map<String, SubscriptionData> subTable = this.getSubscriptionInner();
         if (subTable != null) {
@@ -859,10 +911,77 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /**
+     * 返回MQConsumerInner所有topic订阅关系
+     * @return
+     */
+    @Override
+    public Set<SubscriptionData> subscriptions() {
+        Set<SubscriptionData> subSet = new HashSet<SubscriptionData>();
+
+        subSet.addAll(this.rebalanceImpl.getSubscriptionInner().values());
+
+        return subSet;
+    }
+
+    /**
+     * 加载订阅关系,启动MQConsumerInner加载只加载一次
+     *
+     * 1  加载defaultMQPushConsumer.getSubscription(),使用FilterAPI转为SubscriptionData,添加到subscriptionInner
+     * 2  如果消费方式 CLUSTERING 添加一个默认重试topic,使用FilterAPI转为SubscriptionData,  %RETRY%consumerGroup
+     * 3  设置messageListenerInner
+     * @throws MQClientException
+     */
+    private void copySubscription() throws MQClientException {
+        try {
+            //加载defaultMQPushConsumer.getSubscription(),使用FilterAPI转为SubscriptionData,添加到subscriptionInner
+            Map<String, String> sub = this.defaultMQPushConsumer.getSubscription();
+            if (sub != null) {
+                for (final Map.Entry<String, String> entry : sub.entrySet()) {
+                    final String topic = entry.getKey();
+                    final String subString = entry.getValue();
+                    SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
+                            topic, subString);
+                    this.rebalanceImpl.getSubscriptionInner().put(topic, subscriptionData);
+                }
+            }
+
+            if (null == this.messageListenerInner) {
+                this.messageListenerInner = this.defaultMQPushConsumer.getMessageListener();
+            }
+
+            //如果消费方式 CLUSTERING 添加一个默认重试topic,使用FilterAPI转为SubscriptionData,  %RETRY%consumerGroup
+            switch (this.defaultMQPushConsumer.getMessageModel()) {
+                case BROADCASTING:
+                    break;
+                case CLUSTERING:
+                    final String retryTopic = MixAll.getRetryTopic(this.defaultMQPushConsumer.getConsumerGroup());
+                    SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
+                            retryTopic, SubscriptionData.SUB_ALL);
+                    this.rebalanceImpl.getSubscriptionInner().put(retryTopic, subscriptionData);
+                    break;
+                default:
+                    break;
+            }
+        } catch (Exception e) {
+            throw new MQClientException("subscription exception", e);
+        }
+    }
+
+    /**
+     * 查看所有订阅关系
+     * @return
+     */
     public ConcurrentMap<String, SubscriptionData> getSubscriptionInner() {
         return this.rebalanceImpl.getSubscriptionInner();
     }
 
+    /**
+     * 设置订阅关系
+     * @param topic
+     * @param subExpression  TAG规律规则 "TagA || TagC || TagD"
+     * @throws MQClientException
+     */
     public void subscribe(String topic, String subExpression) throws MQClientException {
         try {
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
@@ -876,6 +995,13 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /**
+     * 设置订阅关系【MessageFilter实现】
+     * @param topic
+     * @param fullClassName  MessageFilter实现JAVA全路径
+     * @param filterClassSource  MessageFilter实现code
+     * @throws MQClientException
+     */
     public void subscribe(String topic, String fullClassName, String filterClassSource) throws MQClientException {
         try {
             SubscriptionData subscriptionData = FilterAPI.buildSubscriptionData(this.defaultMQPushConsumer.getConsumerGroup(),
@@ -893,6 +1019,15 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
+    /**
+     * 设置订阅关系【messageSelector实现】
+     * @param topic
+     * @param messageSelector  消息TAG过滤选择器可以使用如下2中方法按照规则过滤消息
+     *                        1 MessageSelector.bySql("(TAGS is not null and TAGS in ('TagA', 'TagB'))" +
+     *                        "and (a is not null and a between 0  3)"));
+     *                        2  MessageSelector byTag(String "TagA || TagC || TagD")
+     * @throws MQClientException
+     */
     public void subscribe(final String topic, final MessageSelector messageSelector) throws MQClientException {
         try {
             if (messageSelector == null) {
@@ -912,14 +1047,16 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         }
     }
 
-    public void suspend() {
-        this.pause = true;
-        log.info("suspend this consumer, {}", this.defaultMQPushConsumer.getConsumerGroup());
-    }
-
+    /**
+     * 取消topic对应的订阅关系
+     * @param topic
+     */
     public void unsubscribe(String topic) {
         this.rebalanceImpl.getSubscriptionInner().remove(topic);
     }
+
+
+
 
     public void updateConsumeOffset(MessageQueue mq, long offset) {
         this.offsetStore.updateOffset(mq, offset, false);
@@ -985,14 +1122,7 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
         return this.defaultMQPushConsumer.getConsumeFromWhere();
     }
 
-    @Override
-    public Set<SubscriptionData> subscriptions() {
-        Set<SubscriptionData> subSet = new HashSet<SubscriptionData>();
 
-        subSet.addAll(this.rebalanceImpl.getSubscriptionInner().values());
-
-        return subSet;
-    }
 
     @Override
     public void doRebalance() {

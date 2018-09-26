@@ -41,18 +41,52 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 import org.slf4j.Logger;
 
 /**
- * Base class for rebalance algorithm
+ * 负载均衡MessageQueue队列服务实现
+ *
+ * 1 每一个RebalanceImpl都会为一个MQConsumerInner【Pull或Push】提供负载均衡MessageQueue队列提供服务
+ *   换句话说RebalanceImpl都会服务一个consumerGroup
+ *
+ *
  */
 public abstract class RebalanceImpl {
     protected static final Logger log = ClientLogger.getLog();
     protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
     protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
         new ConcurrentHashMap<String, Set<MessageQueue>>();
+    /**
+     * MQConsumerInner 订阅关系
+     *
+     * subscriptionInner 初始化 在如下
+     * MQConsumerInner实现为DefaultMQPushConsumerImpl会在如下2个地方触发初始化
+     * 1  DefaultMQPushConsumerImpl.start()  -- >  DefaultMQPushConsumerImpl.copySubscription()
+     *    1-1 加载defaultMQPushConsumer.getSubscription(),使用FilterAPI转为SubscriptionData,添加到subscriptionInner
+     *    1-2 如果消费方式 CLUSTERING 添加一个默认重试topic,使用FilterAPI转为SubscriptionData,  %RETRY%consumerGroup
+     * 2  手动调用subscribe，使用FilterAPI转为SubscriptionData,添加到subscriptionInner
+     *
+     * MQConsumerInner实现为DefaultMQPullConsumerImpl会在如下2个地方触发初始化
+     *
+     *
+     */
     protected final ConcurrentMap<String /* topic */, SubscriptionData> subscriptionInner =
         new ConcurrentHashMap<String, SubscriptionData>();
+    /**
+     * MQConsumerInner服务组名称
+     */
     protected String consumerGroup;
+
+    /**
+     * MQConsumerInner消费方式
+     */
     protected MessageModel messageModel;
+
+    /**
+     * 队列分配策略【子类多个实现】
+     */
     protected AllocateMessageQueueStrategy allocateMessageQueueStrategy;
+
+    /**
+     * RPC远程调用客户端通
+     */
     protected MQClientInstance mQClientFactory;
 
     public RebalanceImpl(String consumerGroup, MessageModel messageModel,
@@ -64,6 +98,11 @@ public abstract class RebalanceImpl {
         this.mQClientFactory = mQClientFactory;
     }
 
+    /**
+     * 解锁MessageQueue
+     * @param mq
+     * @param oneway
+     */
     public void unlock(final MessageQueue mq, final boolean oneway) {
         FindBrokerResult findBrokerResult = this.mQClientFactory.findBrokerAddressInSubscribe(mq.getBrokerName(), MixAll.MASTER_ID, true);
         if (findBrokerResult != null) {

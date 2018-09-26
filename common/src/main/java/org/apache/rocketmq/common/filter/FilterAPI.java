@@ -19,6 +19,12 @@ package org.apache.rocketmq.common.filter;
 import java.net.URL;
 import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 
+/**
+ * 消息过滤API
+ *
+ * 将MQConsumerInner.subscribe订阅规则转化为
+ *
+ */
 public class FilterAPI {
     public static URL classFile(final String className) {
         final String javaSource = simpleClassName(className) + ".java";
@@ -36,6 +42,14 @@ public class FilterAPI {
         return simple;
     }
 
+    /**
+     * 创建SubscriptionData
+     * @param consumerGroup 分组名
+     * @param topic         topic名称
+     * @param subString     tag规则  "TagA || TagC || TagD" 或  *
+     * @return
+     * @throws Exception
+     */
     public static SubscriptionData buildSubscriptionData(final String consumerGroup, String topic,
         String subString) throws Exception {
         SubscriptionData subscriptionData = new SubscriptionData();
@@ -64,6 +78,14 @@ public class FilterAPI {
         return subscriptionData;
     }
 
+    /**
+     * 创建SubscriptionData
+     * @param topic   topic名称
+     * @param subString  规则
+     * @param type       规则类型  ExpressionType
+     * @return
+     * @throws Exception
+     */
     public static SubscriptionData build(final String topic, final String subString,
         final String type) throws Exception {
         if (ExpressionType.TAG.equals(type) || type == null) {

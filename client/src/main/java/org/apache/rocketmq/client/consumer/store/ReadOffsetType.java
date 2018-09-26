@@ -16,6 +16,12 @@
  */
 package org.apache.rocketmq.client.consumer.store;
 
+/**
+ * 获取MessageQueue消费进度方式
+ *
+ * MessageModel.CLUSTERING 集群消费，消费进度保存在broker 类型为READ_FROM_STORE
+ * MessageModel.BROADCASTING 广播消费,消费进度保存在本地,类型为READ_FROM_MEMORY
+ */
 public enum ReadOffsetType {
     /**
      * From memory

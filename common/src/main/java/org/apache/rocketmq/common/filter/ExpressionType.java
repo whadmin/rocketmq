@@ -17,6 +17,10 @@
 
 package org.apache.rocketmq.common.filter;
 
+/**
+ * TAG过滤选择器类型
+ * 默认为TAG
+ */
 public class ExpressionType {
 
     /**
