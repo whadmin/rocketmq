@@ -20,8 +20,10 @@ package org.apache.rocketmq.client.consumer;
 import org.apache.rocketmq.common.filter.ExpressionType;
 
 /**
- * 消息TAG过滤选择器：在服务器上选择消息。
- * 提供了2中类型  ExpressionType.SQL92,ExpressionType.TAG
+ * 消息TAG过滤选择器
+ * 提供了2中类型
+ * ExpressionType.SQL92,
+ * ExpressionType.TAG
  */
 public class MessageSelector {
 

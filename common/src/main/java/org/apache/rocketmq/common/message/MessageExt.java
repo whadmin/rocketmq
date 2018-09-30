@@ -25,9 +25,7 @@ import org.apache.rocketmq.common.sysflag.MessageSysFlag;
 public class MessageExt extends Message {
     private static final long serialVersionUID = 5720810158625748049L;
 
-    /**
-     * 队列id
-     */
+    //messageQueue下标
     private int queueId;
     //整个存储空间，包含TOTALSIZE,MAGICCODE,BODYCRC等
     private int storeSize;

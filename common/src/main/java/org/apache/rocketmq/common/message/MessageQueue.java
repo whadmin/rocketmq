@@ -18,10 +18,27 @@ package org.apache.rocketmq.common.message;
 
 import java.io.Serializable;
 
+/**
+ * 消息队列
+ * MQProducer 创建一个消息topic Message消息会发送到多个broker节点
+ * 每一个节点会会随机从MessageQueue集合列表中选择一个MessageQueue存储
+ *
+ * topic   1<-->多 brokerName
+ * brokerName  1<-->多  MessageQueue
+ */
 public class MessageQueue implements Comparable<MessageQueue>, Serializable {
     private static final long serialVersionUID = 6191200464116433425L;
+    /**
+     * topic
+     */
     private String topic;
+    /**
+     * broker节点名称【当前MessageQueue属于哪里一个broker节点】
+     */
     private String brokerName;
+    /**
+     * 队列下标【当前MessageQueue在broker节点多MessageQueue集合的下标】
+     */
     private int queueId;
 
     public MessageQueue() {

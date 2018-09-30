@@ -20,7 +20,31 @@ import java.util.List;
 import org.apache.rocketmq.common.message.MessageQueue;
 
 /**
- * Strategy Algorithm for message allocating between consumers
+ * AllocateMessageQueueStrategy 用来分配MessageQueue和clientID一对一关系的策略算法
+ *
+ * Topic  ----  consumerGroup 是一对订阅关系
+ *
+ * 【发送消息】
+ *
+ * Topic消息会发送到多个broker节点的多个MessageQueue中
+ *
+ * TopicA -----brokerNameA  -----MessageQueue1
+ *                          -----MessageQueue2
+ *                          -----MessageQueue3
+ *                          -----MessageQueue4
+ *
+ * TopicA -----brokerNameB  -----MessageQueue1
+ *                          -----MessageQueue2
+ *                          -----MessageQueue3
+ *                          -----MessageQueue4
+ *
+ * 【消息消息】
+ *
+ *  每一个消费的客户端IP可能对应多个 consumerGroup
+ *
+ *  clientID  -----consumerGroupA
+ *            -----consumerGroupB
+ *
  */
 public interface AllocateMessageQueueStrategy {
 

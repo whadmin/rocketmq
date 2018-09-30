@@ -41,29 +41,51 @@ import org.apache.rocketmq.common.protocol.heartbeat.SubscriptionData;
 import org.slf4j.Logger;
 
 /**
- * 负载均衡MessageQueue队列服务实现
+ * 为某一个consumerGroup提供负载均衡MessageQueue队列服务实现
  *
- * 1 每一个RebalanceImpl都会为一个MQConsumerInner【Pull或Push】提供负载均衡MessageQueue队列提供服务
- *   换句话说RebalanceImpl都会服务一个consumerGroup
+ * RebalanceImpl 1<-->1  MQConsumerInner【Pull或Push】
  *
+ * TopicA          对应3个MessageQueue   MessageQueue1,MessageQueue2,MessageQueue3
+ * consumerGroupA  对应2消费者  client1,client2
+ * consumerGroupB  对应2消费者  client1,client2
  *
+ * consumerGroupA 使用 BROADCASTING【广播消费】
+ *
+ * 【MessageQueue1,MessageQueue2,MessageQueue3】-->client1【consumerGroupA，consumerGroupB】
+ * 【MessageQueue1,MessageQueue2,MessageQueue3】 --> client2【consumerGroupA，consumerGroupB】
+ *
+ * consumerGroupA 使用 CLUSTERING【集群消费】
+ *
+ *  【MessageQueue1,MessageQueue2】-->client1【consumerGroupA，consumerGroupB】
+ *  【MessageQueue3】 --> client2【consumerGroupA，consumerGroupB】
+ *
+ * 当我们使用顺序消息的时候会在 group+client锁定MessageQueue 保证MessageQueue3消息只能给某一个consumerGroup一台机器消费【保证顺序】
+ *
+ * ConcurrentMap<String group ,ConcurrentHashMap<MessageQueue,LockEntry>>mqLockTable= new ConcurrentHashMap<String,ConcurrentHashMap<MessageQueue,LockEntry>>(1024)
+ *
+ * 每一个topic@group都存在一个消费进度
+ *
+ *  我们针对CLUSTERING【集群消费】使用  RemoteBrokerOffsetStore【保存在broker】
+ *  我们针对CLUSTERING【集群消费】使用  LocalFileOffsetStore【保存在consumer】
  */
 public abstract class RebalanceImpl {
+
     protected static final Logger log = ClientLogger.getLog();
+
     protected final ConcurrentMap<MessageQueue, ProcessQueue> processQueueTable = new ConcurrentHashMap<MessageQueue, ProcessQueue>(64);
+
     protected final ConcurrentMap<String/* topic */, Set<MessageQueue>> topicSubscribeInfoTable =
         new ConcurrentHashMap<String, Set<MessageQueue>>();
+
     /**
-     * MQConsumerInner 订阅关系
-     *
-     * subscriptionInner 初始化 在如下
+     * 订阅关系
      * MQConsumerInner实现为DefaultMQPushConsumerImpl会在如下2个地方触发初始化
      * 1  DefaultMQPushConsumerImpl.start()  -- >  DefaultMQPushConsumerImpl.copySubscription()
      *    1-1 加载defaultMQPushConsumer.getSubscription(),使用FilterAPI转为SubscriptionData,添加到subscriptionInner
      *    1-2 如果消费方式 CLUSTERING 添加一个默认重试topic,使用FilterAPI转为SubscriptionData,  %RETRY%consumerGroup
      * 2  手动调用subscribe，使用FilterAPI转为SubscriptionData,添加到subscriptionInner
      *
-     * MQConsumerInner实现为DefaultMQPullConsumerImpl会在如下2个地方触发初始化
+     * MQConsumerInner实现为DefaultMQPullConsumerImpl会在如下1个地方触发初始化
      *
      *
      */

@@ -926,9 +926,8 @@ public class DefaultMQPushConsumerImpl implements MQConsumerInner {
 
     /**
      * 加载订阅关系,启动MQConsumerInner加载只加载一次
-     *
-     * 1  加载defaultMQPushConsumer.getSubscription(),使用FilterAPI转为SubscriptionData,添加到subscriptionInner
-     * 2  如果消费方式 CLUSTERING 添加一个默认重试topic,使用FilterAPI转为SubscriptionData,  %RETRY%consumerGroup
+     * 1  加载defaultMQPushConsumer.getSubscription(),使用FilterAPI将subString转为SubscriptionData,添加到subscriptionInner
+     * 2  如果消费方式 CLUSTERING 添加一个默认重试topic【%RETRY%consumerGroup】,subString为"*",使用FilterAPI将subString转为SubscriptionData,添加到subscriptionInner
      * 3  设置messageListenerInner
      * @throws MQClientException
      */

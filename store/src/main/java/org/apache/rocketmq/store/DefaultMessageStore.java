@@ -817,30 +817,42 @@ public class DefaultMessageStore implements MessageStore {
     public GetMessageResult getMessage(final String group, final String topic, final int queueId, final long offset,
                                        final int maxMsgNums,
                                        final MessageFilter messageFilter) {
+        //校验是否关闭
         if (this.shutdown) {
             log.warn("message store has shutdown, so getMessage is forbidden");
             return null;
         }
 
+        //交易是否可读
         if (!this.runningFlags.isReadable()) {
             log.warn("message store is not readable, so getMessage is forbidden " + this.runningFlags.getFlagBits());
             return null;
         }
 
+        //获取系统当前时间
         long beginTime = this.getSystemClock().now();
-
+        //默认返回查询状态
         GetMessageStatus status = GetMessageStatus.NO_MESSAGE_IN_QUEUE;
+
+        //下次查询consumeQueue索引坐标
         long nextBeginOffset = offset;
+        //consumeQueue 最小偏移的索引坐标
         long minOffset = 0;
+        //ConsumeQueue写入消息最大索引坐标
         long maxOffset = 0;
 
+        //构造返回结果对象
         GetMessageResult getResult = new GetMessageResult();
 
+        //获取commitLog文件队列中存储最最大的偏移坐标
         final long maxOffsetPy = this.commitLog.getMaxOffset();
 
+        //查找topic-queueId 对应ConsumeQueue
         ConsumeQueue consumeQueue = findConsumeQueue(topic, queueId);
         if (consumeQueue != null) {
+            //获取consumeQueue 最小偏移的索引坐标
             minOffset = consumeQueue.getMinOffsetInQueue();
+            //获取ConsumeQueue写入消息最大索引坐标
             maxOffset = consumeQueue.getMaxOffsetInQueue();
 
             if (maxOffset == 0) {
@@ -860,21 +872,29 @@ public class DefaultMessageStore implements MessageStore {
                     nextBeginOffset = nextOffsetCorrection(offset, maxOffset);
                 }
             } else {
+                //获取索引坐标为startIndex的消息所在mappedFile的字节缓冲区分片【pos=startIndex * CQ_STORE_UNIT_SIZE% mappedFileSize】
                 SelectMappedBufferResult bufferConsumeQueue = consumeQueue.getIndexBuffer(offset);
                 if (bufferConsumeQueue != null) {
                     try {
+                        //设置消息返回结果
                         status = GetMessageStatus.NO_MATCHED_MESSAGE;
 
                         long nextPhyFileStartOffset = Long.MIN_VALUE;
                         long maxPhyOffsetPulling = 0;
 
                         int i = 0;
+                        //一次查询获取的消息数量不能超时16000/ConsumeQueue.CQ_STORE_UNIT_SIZE
                         final int maxFilterMessageCount = Math.max(16000, maxMsgNums * ConsumeQueue.CQ_STORE_UNIT_SIZE);
+
                         final boolean diskFallRecorded = this.messageStoreConfig.isDiskFallRecorded();
                         ConsumeQueueExt.CqExtUnit cqExtUnit = new ConsumeQueueExt.CqExtUnit();
+                        //遍历获取消息
                         for (; i < bufferConsumeQueue.getSize() && i < maxFilterMessageCount; i += ConsumeQueue.CQ_STORE_UNIT_SIZE) {
+                            // 获取消息 CommitLog 偏移坐标
                             long offsetPy = bufferConsumeQueue.getByteBuffer().getLong();
+                            // 获取消息 消息长度
                             int sizePy = bufferConsumeQueue.getByteBuffer().getInt();
+                            // 获取消息 tagsCode
                             long tagsCode = bufferConsumeQueue.getByteBuffer().getLong();
 
                             maxPhyOffsetPulling = offsetPy;
@@ -883,7 +903,7 @@ public class DefaultMessageStore implements MessageStore {
                                 if (offsetPy < nextPhyFileStartOffset)
                                     continue;
                             }
-
+                            //检查校验offsetPy偏移坐标开始读取之后所有数据开始数据是否能从磁盘独处全部写入内存
                             boolean isInDisk = checkInDiskByCommitOffset(offsetPy, maxOffsetPy);
 
                             if (this.isTheBatchFull(sizePy, maxMsgNums, getResult.getBufferTotalSize(), getResult.getMessageCount(),
@@ -955,6 +975,7 @@ public class DefaultMessageStore implements MessageStore {
                         bufferConsumeQueue.release();
                     }
                 } else {
+                    //查询消息物理偏移位置没有在ConsumeQueue文件队列中找到
                     status = GetMessageStatus.OFFSET_FOUND_NULL;
                     nextBeginOffset = nextOffsetCorrection(offset, consumeQueue.rollNextFile(offset));
                     log.warn("consumer request topic: " + topic + "offset: " + offset + " minOffset: " + minOffset + " maxOffset: "
@@ -962,15 +983,19 @@ public class DefaultMessageStore implements MessageStore {
                 }
             }
         } else {
+            //查询消息topic-queueId 对应ConsumeQueue不存在
             status = GetMessageStatus.NO_MATCHED_LOGIC_QUEUE;
             nextBeginOffset = nextOffsetCorrection(offset, 0);
         }
 
         if (GetMessageStatus.FOUND == status) {
+            // 统计查询到消息的次数
             this.storeStatsService.getGetMessageTimesTotalFound().incrementAndGet();
         } else {
+            //统计没有查询到消息的次数
             this.storeStatsService.getGetMessageTimesTotalMiss().incrementAndGet();
         }
+        //记录并统计计算最大查询时间
         long eclipseTime = this.getSystemClock().now() - beginTime;
         this.storeStatsService.setGetMessageEntireTimeMax(eclipseTime);
 
@@ -1160,6 +1185,12 @@ public class DefaultMessageStore implements MessageStore {
     }
 
 
+    /**
+     * 订正查询consumeQueue索引坐标
+     * @param oldOffset
+     * @param newOffset
+     * @return
+     */
     private long nextOffsetCorrection(long oldOffset, long newOffset) {
         long nextOffset = oldOffset;
         if (this.getMessageStoreConfig().getBrokerRole() != BrokerRole.SLAVE || this.getMessageStoreConfig().isOffsetCheckInSlave()) {
@@ -1168,6 +1199,14 @@ public class DefaultMessageStore implements MessageStore {
         return nextOffset;
     }
 
+    /**
+     * @param sizePy   当前消息大小
+     * @param maxMsgNums   总共需要获取消息的数量
+     * @param bufferTotal
+     * @param messageTotal
+     * @param isInDisk
+     * @return
+     */
     private boolean isTheBatchFull(int sizePy, int maxMsgNums, int bufferTotal, int messageTotal, boolean isInDisk) {
 
         if (0 == bufferTotal || 0 == messageTotal) {
@@ -1425,7 +1464,7 @@ public class DefaultMessageStore implements MessageStore {
 
 
     /**
-     * 查找创建topic queueId 对应ConsumeQueue
+     * 查找或创建topic queueId 对应ConsumeQueue
      *
      * @param topic
      * @param queueId

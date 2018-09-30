@@ -48,13 +48,44 @@ import org.apache.rocketmq.common.protocol.body.ConsumeMessageDirectlyResult;
 import org.apache.rocketmq.remoting.common.RemotingHelper;
 import org.slf4j.Logger;
 
+/**
+ * MQPushConsumer定时从broker拉取消息生成ConsumeRequest消费请求任务添加到消费服务
+ *
+ * ConsumeMessageConcurrentlyService 负责通过线程池获取ConsumeRequest中的消息进行分解提供给
+ * messageListener 回调处理
+ */
 public class ConsumeMessageConcurrentlyService implements ConsumeMessageService {
+
     private static final Logger log = ClientLogger.getLog();
+
+    /**
+     * defaultMQPushConsumerImpl
+     */
     private final DefaultMQPushConsumerImpl defaultMQPushConsumerImpl;
+
+    /**
+     * defaultMQPushConsumer
+     */
     private final DefaultMQPushConsumer defaultMQPushConsumer;
+
+    /**
+     * 消息消费监听器【用来处理consumeRequestQueue中拉取的获取的消息】
+     */
     private final MessageListenerConcurrently messageListener;
-    private final BlockingQueue<Runnable> consumeRequestQueue;
+
+    /**
+     * 处理消费请求任务【ConsumeRequest】的线程池
+     */
     private final ThreadPoolExecutor consumeExecutor;
+
+    /**
+     * {@code consumeExecutor} 任务阻塞队里
+     */
+    private final BlockingQueue<Runnable> consumeRequestQueue;
+
+    /**
+     * 消费者分组名称
+     */
     private final String consumerGroup;
 
     private final ScheduledExecutorService scheduledExecutorService;

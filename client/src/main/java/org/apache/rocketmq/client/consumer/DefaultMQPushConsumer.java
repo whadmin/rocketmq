@@ -55,7 +55,6 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     private String consumerGroup;
 
     /**
-     * 消息模型定义消息如何传递给每个消费者客户端的方式。
      * RocketMQ支持两种消息模型：集群和广播,
      * 集群：一条消费会给订阅消息中具有*相同{@link #consumerGroup}的消费者客户端中一个消费
      * 广播：一条消费会给订阅消息中所有具有*相同{@link #consumerGroup}的消费者客户端中消费
@@ -74,17 +73,19 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     private ConsumeFromWhere consumeFromWhere = ConsumeFromWhere.CONSUME_FROM_LAST_OFFSET;
 
     /**
-     * 以第二精度回溯消耗时间。, 时间格式是* 20131223171201 <br> *暗示2013年12月23日的十七和十二秒01年*默认回溯消费时间半小时前。
+     * consumeFromWhere.CONSUME_FROM_TIMESTAMP时，默认消息回溯时间节点. 时间格式是* 20131223171201
      */
     private String consumeTimestamp = UtilAll.timeMillisToHumanString3(System.currentTimeMillis() - (1000 * 60 * 30));
 
     /**
-     * 队列分配算法，指定如何将消息队列分配给每个使用者客户端。
+     * AllocateMessageQueueStrategy 用来分配MessageQueue和clientID一对一关系的策略算法
      */
     private AllocateMessageQueueStrategy allocateMessageQueueStrategy;
 
     /**
-     * 订阅关系【订阅规则】
+     * 订阅关系【订阅规则】 规则如 topicA   "TagA || TagC || TagD"
+     * MQConsumerInner--> start()-->copySubscription() 启动
+     * 时使用FilterAPI将subexpressionn转为SubscriptionData添加到RebalanceImpl.subscriptionInner
      */
     private Map<String /* topic */, String /* sub expression */> subscription = new HashMap<String, String>();
 
@@ -101,12 +102,12 @@ public class DefaultMQPushConsumer extends ClientConfig implements MQPushConsume
     private OffsetStore offsetStore;
 
     /**
-     * 最小消费者线程数
+     * ConsumeMessageService 中线程池核心线程数
      */
     private int consumeThreadMin = 20;
 
     /**
-     * 最大消费者线程数
+     * ConsumeMessageService 中线程池最大线程数
      */
     private int consumeThreadMax = 64;
 

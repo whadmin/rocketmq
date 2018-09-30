@@ -40,7 +40,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * MQ将消息数据信息以固定结构 存储到ConsumeQueue队列文件队列中
+ * MQ将消息数据信息以固定结构 存储到CommitLog文件队列中
  *
  * 第几位 	数据类型 	   说明
      1 	    int 	 TOTALSIZE 	消息+元数据总长度
@@ -106,9 +106,9 @@ public class CommitLog {
 
     private final ThreadLocal<MessageExtBatchEncoder> batchEncoderThreadLocal;
 
-
     /**
-     * 记录消息数据在 topic-queueid中的索引坐标（每添加一个累加+1）
+     * 记录topic-queueid 对应 ConsumeQueue 记录消息总数，也可以说是消息索引下标
+     * 【初始为0,每次向ConsumeQueue添加一条消息+1】
      */
     private HashMap<String/* topic-queueid */, Long/* offset */> topicQueueTable = new HashMap<String, Long>(1024);
 

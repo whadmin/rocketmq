@@ -20,6 +20,9 @@ import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * 本地线程计数器
+ */
 public class ThreadLocalIndexTest {
     @Test
     public void testGetAndIncrement() throws Exception {
