@@ -437,12 +437,14 @@ public class CommitLog {
         msg.setStoreTimestamp(System.currentTimeMillis());
         // 设置邮件正文BODY CRC
         msg.setBodyCRC(UtilAll.crc32(msg.getBody()));
+
         // 返回结果
         AppendMessageResult result = null;
-
+        // 获取文件统计服务
         StoreStatsService storeStatsService = this.defaultMessageStore.getStoreStatsService();
-
+        //获取消息topic
         String topic = msg.getTopic();
+        //messageQueue下标
         int queueId = msg.getQueueId();
 
         //获取消息的sysflag字段，检查消息是否是非事务性（第3/4字节为0）或者提交事务（commit，第4字节为1，第3字节为0）消息
@@ -470,25 +472,28 @@ public class CommitLog {
                 msg.setQueueId(queueId);
             }
         }
-
+        //记录加锁时间
         long eclipseTimeInLock = 0;
+
         MappedFile unlockMappedFile = null;
-        //调用MapedFileQueue.getLastMapedFile方法获取或者创建最后一个文件（即MapedFile列表中的最后一个MapedFile对象），
-        //若还没有文件或者已有的最后一个文件已经写满则创建一个新的文件，即创建一个新的MapedFile对象并返回；
+
+        //从mappedFileQueue 获取最后一个需要写入的MappedFile，若还没有文件或者已有的最后一个文件已经写满则创建一个新的文件，即创建一个新的MapedFile对象并返回；
         MappedFile mappedFile = this.mappedFileQueue.getLastMappedFile();
 
         //加锁
         putMessageLock.lock();
         try {
+            //获取 SystemClock(系统时钟获取当前时间)
             long beginLockTimestamp = this.defaultMessageStore.getSystemClock().now();
+            //设置开始加锁时间为当前时间
             this.beginTimeInLock = beginLockTimestamp;
-
-            // 设置消息的生成时间
+            //设置消息生成时间为当前时间
             msg.setStoreTimestamp(beginLockTimestamp);
-
+            ///如果mappedFile为null，表示当前消息为第一条消息，mappedFileQueue队列中初始化创建第一个MappedFile
             if (null == mappedFile || mappedFile.isFull()) {
                 mappedFile = this.mappedFileQueue.getLastMappedFile(0); // Mark: NewFile may be cause noise
             }
+            //如果mappedFile依旧为null,抛出异常
             if (null == mappedFile) {
                 log.error("create mapped file1 error, topic: " + msg.getTopic() + " clientAddr: " + msg.getBornHostString());
                 beginTimeInLock = 0;
