@@ -61,7 +61,7 @@ import sun.nio.ch.DirectBuffer;
  * 使用TransientStorePool
  * 1 初始化的时候会从TransientStorePool（堆外内存池） 获得一个writeBuffer（堆外内存缓存区）
  * 2 消息文件会写入writeBuffer（堆外内存缓存区）
- * 3 通过brokerFlush线程定时调用 commit 方法将writeBuffer（堆外内存缓存区）数据写入fileChannel，记录committedPosition
+ * 3 通过Commit线程定时调用 commit 方法将writeBuffer（堆外内存缓存区）数据写入fileChannel，记录committedPosition
  * 4 通过brokerFlush线程定时调用 flush 方法将将fileChannel中数据写入磁盘，记录flushedPosition
  */
 public class MappedFile extends ReferenceResource {
@@ -77,17 +77,17 @@ public class MappedFile extends ReferenceResource {
     public static final int OS_PAGE_SIZE = 1024 * 4;
 
     /**
-     * commitlog目录下所有MappedFile占用内存的总大小
+     * 记录commitlog目录下所有MappedFile占用内存的总大小
      */
     private static final AtomicLong TOTAL_MAPPED_VIRTUAL_MEMORY = new AtomicLong(0);
 
     /**
-     * commitlog目录下所有MappedFile总文件数
+     * 记录commitlog目录下所有MappedFile总文件数
      */
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
 
     /**
-     * MappedFile 对象可以选择通过内存映射ByteBuffer字节缓冲区完成文件操作
+     * MappedFile文件对应mappedByteBuffer（内存映射字节缓冲区）
      */
     private MappedByteBuffer mappedByteBuffer;
 
@@ -96,17 +96,15 @@ public class MappedFile extends ReferenceResource {
      */
     protected FileChannel fileChannel;
 
-    /** 使用TransientStorePool关注属性 **/
     /**
      * 堆外内存池
      */
     protected TransientStorePool transientStorePool = null;
 
     /**
-     * 通过transientStorePool获取堆外内存ByteBuffer字节缓冲区
+     * 通过transientStorePool获取ByteBuffer（堆外内存字节缓冲区）
      */
     protected ByteBuffer writeBuffer = null;
-
 
     /**
      * wrotePosition mappedByteBuffer/writeBuffer 字节缓冲区中pos写入位置
@@ -114,15 +112,14 @@ public class MappedFile extends ReferenceResource {
     protected final AtomicInteger wrotePosition = new AtomicInteger(0);
 
     /**
-     * MappedFile使用TransientStorePool,会从池中获取一块字节缓冲区writeBuffer,追加数据不在写入mappedByteBuffer,
-     * 而是写入writeBuffer,在调用执行commit时会将writeBuffer写入文件对应fileChannel。
+     * MappedFile使用TransientStorePool时
+     * broker commit 线程定时调用 commit 方法将writeBuffer（堆外内存缓存区）数据写入fileChannel
      * committedPosition 表示fileChannel.commit后内存写入位置。理论上==wrotePosition
      */
     protected final AtomicInteger committedPosition = new AtomicInteger(0);
 
     /**
-     * 刷盘位置
-     * 无论是否使用TransientStorePool，在调用flush方法会将fileChannel或mappedByteBuffer内存中的数据写入磁盘
+     * broker flush 线程定时调用 flush 方法将mappedByteBuffer/fileChannel写入磁盘 记录flushedPosition
      */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
 
@@ -168,8 +165,8 @@ public class MappedFile extends ReferenceResource {
     /**
      * 创建MappedFile并设置文件名称，大小
      * 使用当前方法创建的MappedFile并没有使用 TransientStorePool（堆外内存池）
-     * 1 消息文件会写入mappedByteBuffer内存映射字节缓冲区中
-     * 2 通过brokerFlush线程定时调用 flush 方法将mappedByteBuffer内存映射字节缓冲区中写入磁盘
+     * 1 消息文件会写入mappedByteBuffer内存映射字节缓冲区中 记录committedPosition
+     * 2 通过brokerFlush线程定时调用 flush 方法将mappedByteBuffer内存映射字节缓冲区中写入磁盘 记录flushedPosition
      */
     public MappedFile(final String fileName, final int fileSize) throws IOException {
         init(fileName, fileSize);
@@ -179,6 +176,8 @@ public class MappedFile extends ReferenceResource {
      * 创建MappedFile并设置文件名称，大小，同时设置TransientStorePool（堆外内存池）
      * 1 初始化的时候会从TransientStorePool（堆外内存池） 获得一个writeBuffer（堆外内存缓存区）
      * 2 消息文件会写入writeBuffer（堆外内存缓存区）
+     * 3 通过Commit线程定时调用 commit 方法将writeBuffer（堆外内存缓存区）数据写入fileChannel，记录committedPosition
+     * 4 通过brokerFlush线程定时调用 flush 方法将将fileChannel中数据写入磁盘，记录flushedPosition
      */
     public MappedFile(final String fileName, final int fileSize,
                       final TransientStorePool transientStorePool) throws IOException {
@@ -258,7 +257,7 @@ public class MappedFile extends ReferenceResource {
 
     /***********************    追加数据 star       ***********************/
     /**
-     * 追加消息
+     * 向MapperFile追加消息,消息会写入ByteBuffer（堆外内存字节缓冲区）/mappedByteBuffer（内存映射字节缓冲区），等待异步刷盘
      *
      * @param msg
      * @param cb
@@ -269,7 +268,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 追加批量消息
+     * 向MapperFile追加批量消息，,消息会写入ByteBuffer（堆外内存字节缓冲区）/mappedByteBuffer（内存映射字节缓冲区），等待异步刷盘
      *
      * @param messageExtBatch
      * @param cb
@@ -293,10 +292,7 @@ public class MappedFile extends ReferenceResource {
         int currentPos = this.wrotePosition.get();
         //文件还有剩余空间
         if (currentPos < this.fileSize) {
-            //创建一个writeBuffer或mappedByteBufferd position 到 limit 的分片字节缓存区,
-            //这里需要新缓冲区与原来的缓冲区的一部分共享数据，但两个缓冲区的位置，极限和标记值将是独立的，怎么理解？
-            //我们通过向分片缓存区slice() 追加数据,因为数据共享此时mappedByteBuffer数据已经追加，但是mappedByteBuffer中的标记始终保持不变[pos=0 lim=10485760 cap=10485760]
-            //所以我们每次slice()分片缓存区也都是[pos=0 lim=10485760 cap=10485760]，并自己记录pos，并在每次添加时手动设置。
+            //通过判断writeBuffer（推外内存字节缓冲区）来判断是否使用堆外内存池
             ByteBuffer byteBuffer = writeBuffer != null ? writeBuffer.slice() : this.mappedByteBuffer.slice();
             byteBuffer.position(currentPos);
 
@@ -321,7 +317,7 @@ public class MappedFile extends ReferenceResource {
 
 
     /**
-     * MappedFile追加数据实现
+     * MappedFile 文件尾部追加数据（直接写入文件）
      *
      * @param data
      * @return
@@ -344,7 +340,7 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * MappedFile追加数据实现
+     * MappedFile 文件指定偏移位置追加数据（直接写入文件）
      *
      * @param data
      * @param offset 偏移位置
@@ -370,15 +366,17 @@ public class MappedFile extends ReferenceResource {
 
 
     /**
-     * 将mappedByteBuffer或fileChannel中数据写入磁盘
-     * 记录flushedPosition=getReadPosition()
+     * 将mappedByteBuffer或fileChannel中数据写入磁盘，
      *
-     * @return flushedPosition
+     * @param flushLeastPages  用来判断是否可以刷新最小页
+     * @return flushedPosition 刷新偏移
      */
     public int flush(final int flushLeastPages) {
-        //是否可以刷盘
+        //判断是否可以进行刷盘
         if (this.isAbleToFlush(flushLeastPages)) {
+            //引用计数+1
             if (this.hold()) {
+                // 获取可以写入磁盘的偏移（mappedByteBuffer对应wrotePosition，也可能是writeBuffer对应committedPosition）
                 int value = getReadPosition();
 
                 try {
@@ -392,8 +390,9 @@ public class MappedFile extends ReferenceResource {
                 } catch (Throwable e) {
                     log.error("Error occurred when force data to disk.", e);
                 }
-
+                //记录flushedPosition=getReadPosition()
                 this.flushedPosition.set(value);
+                //引用计数-1
                 this.release();
             } else {
                 log.warn("in flush, hold failed, flush offset = " + this.flushedPosition.get());
@@ -426,11 +425,11 @@ public class MappedFile extends ReferenceResource {
 
 
     /**
-     * MappedFile使用transientStorePool追加数据时,
-     * 需要调用执行commit将ByteBuffer字节缓冲区中的数据写入fileChannel
+     * MappedFile使用transientStorePool追加数据时
+     * ByteBuffer字节缓冲区中的数据写入fileChannel
      *
-     * @param commitLeastPages
-     * @return
+     * @param commitLeastPages  用来判断是否可以刷新最小页
+     * @return flushedPosition  提交的偏移
      */
     public int commit(final int commitLeastPages) {
         //当writeBuffer为null，直接返回 wrotePosition
@@ -439,21 +438,24 @@ public class MappedFile extends ReferenceResource {
         }
         //是否可以提交
         if (this.isAbleToCommit(commitLeastPages)) {
+            //引用计数+1
             if (this.hold()) {
+                // 提交核心实现
                 commit0(commitLeastPages);
+                //引用计数-1
                 this.release();
             } else {
                 log.warn("in commit, hold failed, commit offset = " + this.committedPosition.get());
             }
         }
-
-        // All dirty data has been committed to FileChannel.
+        //如果文件写满了将writeBuffer堆外内存字节缓冲区 归还给 对外内存池
         if (writeBuffer != null && this.transientStorePool != null && this.fileSize == this.committedPosition.get()) {
-            //交还给transientStorePool
+            //将writeBuffer堆外内存字节缓冲区 归还给 对外内存池
             this.transientStorePool.returnBuffer(writeBuffer);
+            //设置writeBuffer堆外内存字节缓冲区为null
             this.writeBuffer = null;
         }
-
+        //返回提交的偏移
         return this.committedPosition.get();
     }
 
@@ -477,6 +479,7 @@ public class MappedFile extends ReferenceResource {
                 byteBuffer.limit(writePos);
                 this.fileChannel.position(lastCommittedPosition);
                 this.fileChannel.write(byteBuffer);
+                //记录committedPosition
                 this.committedPosition.set(writePos);
             } catch (Throwable e) {
                 log.error("Error occurred when commit data to FileChannel.", e);
