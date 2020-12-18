@@ -123,12 +123,12 @@ public class DefaultMessageStoreTest {
     public MessageExtBrokerInner buildMessage() {
         MessageExtBrokerInner msg = new MessageExtBrokerInner();
         msg.setTopic("FooBar");
+        msg.setBody(MessageBody);
+        msg.setSysFlag(0);
         msg.setTags("TAG1");
         msg.setKeys("Hello");
-        msg.setBody(MessageBody);
         msg.setKeys(String.valueOf(System.currentTimeMillis()));
         msg.setQueueId(Math.abs(QueueId.getAndIncrement()) % QUEUE_TOTAL);
-        msg.setSysFlag(0);
         msg.setBornTimestamp(System.currentTimeMillis());
         msg.setStoreHost(StoreHost);
         msg.setBornHost(BornHost);

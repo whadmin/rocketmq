@@ -53,7 +53,6 @@ public class MappedFileQueue {
      */
     private final int mappedFileSize;
 
-
     /**
      * mappedFiles列表
      */
@@ -68,6 +67,7 @@ public class MappedFileQueue {
      * 刷盘flush的坐标地址
      */
     private long flushedWhere = 0;
+
     /**
      * 提交commit的坐标地址
      */

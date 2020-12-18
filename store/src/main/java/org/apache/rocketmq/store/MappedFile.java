@@ -44,8 +44,8 @@ import org.slf4j.LoggerFactory;
 import sun.nio.ch.DirectBuffer;
 
 /**
- * MappedFile 用来表示文件队列中一个文件对象
- *
+ * MappedFile 用来文件系统中 文件对象
+ * <p>
  * MappedFile 有2中类型方式去追加消息数据
  * <p>
  * 1 使用TransientStorePool
@@ -59,8 +59,15 @@ import sun.nio.ch.DirectBuffer;
  */
 public class MappedFile extends ReferenceResource {
 
-    public static final int OS_PAGE_SIZE = 1024 * 4;
+    /**
+     * 日志文件
+     */
     protected static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
+
+    /**
+     * 内存页大小，4KB
+     */
+    public static final int OS_PAGE_SIZE = 1024 * 4;
 
     /**
      * commitlog目录下所有MappedFile占用内存的总大小
@@ -73,26 +80,10 @@ public class MappedFile extends ReferenceResource {
     private static final AtomicInteger TOTAL_MAPPED_FILES = new AtomicInteger(0);
 
     /**
-     * MappedFile文件对应的内存映射ByteBuffer
+     * MappedFile 对象可以选择通过内存映射ByteBuffer字节缓冲区完成文件操作
+     * 通过MappedByteBuffer 对象完成文件操作
      */
     private MappedByteBuffer mappedByteBuffer;
-
-    /**
-     * wrotePosition 表示writeBuffer或mappedByteBuffer字节缓冲区中pos写入位置
-     */
-    protected final AtomicInteger wrotePosition = new AtomicInteger(0);
-
-    /**
-     * MappedFile使用TransientStorePool,会从池中获取一块字节缓冲区writeBuffer,追加数据不在写入mappedByteBuffer,
-     * 而是写入writeBuffer,在调用执行commit时会将writeBuffer写入文件对应fileChannel。
-     * committedPosition 表示fileChannel.commit后内存写入位置。理论上==wrotePosition
-     */
-    protected final AtomicInteger committedPosition = new AtomicInteger(0);
-
-    /**
-     * 使用TransientStorePool从transientStorePool.borrowBuffer()从池中获取一块字节缓冲区,写入消息会优先写入writeBuffer,
-     */
-    protected ByteBuffer writeBuffer = null;
 
     /**
      * MappedFile文件对应fileChannel
@@ -106,10 +97,36 @@ public class MappedFile extends ReferenceResource {
     protected TransientStorePool transientStorePool = null;
 
     /**
+     *
+     * MappedFile 对象可以选择通过TransientStorePool从transientStorePool.borrowBuffer()
+     * 从缓冲区池中获取一块字节缓冲区，通过字节缓冲区来完成文件读写操作
+     */
+    protected ByteBuffer writeBuffer = null;
+
+
+    /**
+     * wrotePosition mappedByteBuffer/writeBuffer 字节缓冲区中pos写入位置
+     */
+    protected final AtomicInteger wrotePosition = new AtomicInteger(0);
+
+    /**
+     * MappedFile使用TransientStorePool,会从池中获取一块字节缓冲区writeBuffer,追加数据不在写入mappedByteBuffer,
+     * 而是写入writeBuffer,在调用执行commit时会将writeBuffer写入文件对应fileChannel。
+     * committedPosition 表示fileChannel.commit后内存写入位置。理论上==wrotePosition
+     */
+    protected final AtomicInteger committedPosition = new AtomicInteger(0);
+
+    /**
      * 刷盘位置
      * 无论是否使用TransientStorePool，在调用flush方法会将fileChannel或mappedByteBuffer内存中的数据写入磁盘
      */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
+
+    /**
+     * MappedFile对应物理文件对象
+     */
+    private File file;
+
     /**
      * mappedFile文件大小，参照MessageStoreConfig.mapedFileSizeCommitLog，默认1G
      */
@@ -128,11 +145,6 @@ public class MappedFile extends ReferenceResource {
     private String fileName;
 
     /**
-     * MappedFile对应物理文件对象
-     */
-    private File file;
-
-    /**
      * 最后一次追加消息写入ByteBuffer的时间
      */
     private volatile long storeTimestamp = 0;
@@ -149,14 +161,18 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     * 构建MappedFile,初始化文件名，大小
+     * 构建MappedFile,设置初始化文件名，大小
+     *
+     * MappedFile 使用mappedByteBuffer内存映射字节缓冲区来操作文件读写
      */
     public MappedFile(final String fileName, final int fileSize) throws IOException {
         init(fileName, fileSize);
     }
 
     /**
-     * 构建MappedFile,初始化文件名，大小，ByteBuffer池对象
+     * 构建MappedFile,设置初始化文件名，大小，
+     *
+     * MappedFile 从TransientStorePool缓冲区池中获取一块字节缓冲区，通过字节缓冲区来完成文件读写操作
      */
     public MappedFile(final String fileName, final int fileSize,
                       final TransientStorePool transientStorePool) throws IOException {
@@ -350,6 +366,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * 将mappedByteBuffer或fileChannel中数据写入磁盘
      * 记录flushedPosition=getReadPosition()
+     *
      * @return flushedPosition
      */
     public int flush(final int flushLeastPages) {
@@ -383,7 +400,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * 是否可以刷盘
      *
-     * @param flushLeastPages  flushLeastPages > 0 只有write-flush > flushLeastPages * 4K 才会刷盘
+     * @param flushLeastPages flushLeastPages > 0 只有write-flush > flushLeastPages * 4K 才会刷盘
      * @return
      */
     private boolean isAbleToFlush(final int flushLeastPages) {
@@ -405,6 +422,7 @@ public class MappedFile extends ReferenceResource {
     /**
      * MappedFile使用transientStorePool追加数据时,
      * 需要调用执行commit将ByteBuffer字节缓冲区中的数据写入fileChannel
+     *
      * @param commitLeastPages
      * @return
      */
@@ -435,6 +453,7 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * 将ByteBuffer字节缓冲区中的数据写入fileChannel
+     *
      * @param commitLeastPages
      */
     protected void commit0(final int commitLeastPages) {
@@ -482,12 +501,12 @@ public class MappedFile extends ReferenceResource {
     /***********************    追加数据 end       ***********************/
 
 
-
     /***********************    选择获取MappedFile数据 star   ***********************/
     /**
      * 读取mappedFile文件 pos物理偏移坐标开始, size长度字节数据
-     * @param pos   mappedFile文件数据初始偏移坐标
-     * @param size  长度
+     *
+     * @param pos  mappedFile文件数据初始偏移坐标
+     * @param size 长度
      * @return
      */
     public SelectMappedBufferResult selectMappedBuffer(int pos, int size) {
@@ -513,9 +532,9 @@ public class MappedFile extends ReferenceResource {
     }
 
     /**
-     *
      * 读取mappedFile文件 pos物理偏移坐标开始所有字节数据
-     * @param pos   mappedFile文件数据初始偏移坐标
+     *
+     * @param pos mappedFile文件数据初始偏移坐标
      * @return
      */
     public SelectMappedBufferResult selectMappedBuffer(int pos) {
@@ -537,15 +556,14 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * 获取文件内存映射
+     *
      * @return
      */
     public ByteBuffer sliceByteBuffer() {
         return this.mappedByteBuffer.slice();
     }
+
     /***********************    选择获取MappedFile数据 end   ***********************/
-
-
-
 
 
     public void warmMappedFile(FlushDiskType type, int pages) {
@@ -588,12 +606,10 @@ public class MappedFile extends ReferenceResource {
     }
 
 
-
-
-
     /***********************    清理 star   ***********************/
     /**
      * 清理mappedFile
+     *
      * @return
      */
     @Override
@@ -702,9 +718,8 @@ public class MappedFile extends ReferenceResource {
 
         return false;
     }
+
     /***********************    清理 end   ***********************/
-
-
 
 
     public int getWrotePosition() {
@@ -781,6 +796,7 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * 返回MappedFile对应字节缓冲区区Pos偏移（可能是mappedByteBuffer对应wrotePosition，也可能是writeBuffer对应committedPosition）
+     *
      * @return
      */
     public int getReadPosition() {

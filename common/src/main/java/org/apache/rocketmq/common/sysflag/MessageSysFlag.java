@@ -19,12 +19,15 @@ package org.apache.rocketmq.common.sysflag;
 public class MessageSysFlag {
     //单标签消息
     public final static int COMPRESSED_FLAG = 0x1;
+    //批量消息
     public final static int MULTI_TAGS_FLAG = 0x1 << 1;
+    //普通消息
     public final static int TRANSACTION_NOT_TYPE = 0;
+    //事务PREPARED消息
     public final static int TRANSACTION_PREPARED_TYPE = 0x1 << 2;
-    //普通消息,事务提交消息标识
+    //事务COMMIT消息
     public final static int TRANSACTION_COMMIT_TYPE = 0x2 << 2;
-    //事务回滚消息
+    //事务ROLLBACK消息
     public final static int TRANSACTION_ROLLBACK_TYPE = 0x3 << 2;
 
     public static int getTransactionValue(final int flag) {
