@@ -44,18 +44,25 @@ import org.slf4j.LoggerFactory;
 import sun.nio.ch.DirectBuffer;
 
 /**
- * MappedFile 用来文件系统中 文件对象
+ * MappedFile 用来表示mq 文件系统中 文件对象
+ * MappedFile 可以用来操作commitlog目录下消息文件
+ * MappedFile 可以用来操作consumequeue目录下消费队列文件
+ * MappedFile 可以用来操作index 目录下索引文件
  * <p>
- * MappedFile 有2中类型方式去追加消息数据
  * <p>
- * 1 使用TransientStorePool
+ * MappedFile 存在2种构造方法，不同的构造方法在调用 appendMessagesInner 写入消息数据时会采用不同的策略
+ * public AppendMessageResult appendMessagesInner(final MessageExt messageExt, final AppendMessageCallback cb)
  * <p>
- * 流程如下
- * transientStorePool.borrowBuffer()从池中获取一块字节缓冲区---->appendMessagesInner写入ByteBuffer（记录wrotePosition）---->commit(将ByteBuffer数据写入fileChannel，记录committedPosition)
- * ---->flush(fileChannel.force()将fileChannel中数据写入磁盘，记录flushedPosition)
+ * 不使用TransientStorePool
  * <p>
- * 2 不使用TransientStorePool
- * appendMessagesInner写入mappedByteBuffer（记录committedPosition）---->commit(什么也不做)---->flush(mappedByteBuffer.force()将mappedByteBuffer中数据写入磁盘，记录flushedPosition)
+ * 1 消息文件会写入mappedByteBuffer内存映射字节缓冲区中 记录committedPosition
+ * 2 通过brokerFlush线程定时调用 flush 方法将mappedByteBuffer内存映射字节缓冲区中写入磁盘 记录flushedPosition
+ * <p>
+ * 使用TransientStorePool
+ * 1 初始化的时候会从TransientStorePool（堆外内存池） 获得一个writeBuffer（堆外内存缓存区）
+ * 2 消息文件会写入writeBuffer（堆外内存缓存区）
+ * 3 通过brokerFlush线程定时调用 commit 方法将writeBuffer（堆外内存缓存区）数据写入fileChannel，记录committedPosition
+ * 4 通过brokerFlush线程定时调用 flush 方法将将fileChannel中数据写入磁盘，记录flushedPosition
  */
 public class MappedFile extends ReferenceResource {
 
@@ -81,25 +88,22 @@ public class MappedFile extends ReferenceResource {
 
     /**
      * MappedFile 对象可以选择通过内存映射ByteBuffer字节缓冲区完成文件操作
-     * 通过MappedByteBuffer 对象完成文件操作
      */
     private MappedByteBuffer mappedByteBuffer;
 
     /**
      * MappedFile文件对应fileChannel
-     * 如果使用TransientStorePool，在调用commit方法中将writeBuffer写入fileChannel
      */
     protected FileChannel fileChannel;
 
+    /** 使用TransientStorePool关注属性 **/
     /**
-     * ByteBuffer池对象
+     * 堆外内存池
      */
     protected TransientStorePool transientStorePool = null;
 
     /**
-     *
-     * MappedFile 对象可以选择通过TransientStorePool从transientStorePool.borrowBuffer()
-     * 从缓冲区池中获取一块字节缓冲区，通过字节缓冲区来完成文件读写操作
+     * 通过transientStorePool获取堆外内存ByteBuffer字节缓冲区
      */
     protected ByteBuffer writeBuffer = null;
 
@@ -121,6 +125,7 @@ public class MappedFile extends ReferenceResource {
      * 无论是否使用TransientStorePool，在调用flush方法会将fileChannel或mappedByteBuffer内存中的数据写入磁盘
      */
     private final AtomicInteger flushedPosition = new AtomicInteger(0);
+
 
     /**
      * MappedFile对应物理文件对象
@@ -155,24 +160,25 @@ public class MappedFile extends ReferenceResource {
     private boolean firstCreateInQueue = false;
 
     /**
-     * 构建MappedFile
+     * 创建MappedFile
      */
     public MappedFile() {
     }
 
     /**
-     * 构建MappedFile,设置初始化文件名，大小
-     *
-     * MappedFile 使用mappedByteBuffer内存映射字节缓冲区来操作文件读写
+     * 创建MappedFile并设置文件名称，大小
+     * 使用当前方法创建的MappedFile并没有使用 TransientStorePool（堆外内存池）
+     * 1 消息文件会写入mappedByteBuffer内存映射字节缓冲区中
+     * 2 通过brokerFlush线程定时调用 flush 方法将mappedByteBuffer内存映射字节缓冲区中写入磁盘
      */
     public MappedFile(final String fileName, final int fileSize) throws IOException {
         init(fileName, fileSize);
     }
 
     /**
-     * 构建MappedFile,设置初始化文件名，大小，
-     *
-     * MappedFile 从TransientStorePool缓冲区池中获取一块字节缓冲区，通过字节缓冲区来完成文件读写操作
+     * 创建MappedFile并设置文件名称，大小，同时设置TransientStorePool（堆外内存池）
+     * 1 初始化的时候会从TransientStorePool（堆外内存池） 获得一个writeBuffer（堆外内存缓存区）
+     * 2 消息文件会写入writeBuffer（堆外内存缓存区）
      */
     public MappedFile(final String fileName, final int fileSize,
                       final TransientStorePool transientStorePool) throws IOException {
@@ -182,7 +188,7 @@ public class MappedFile extends ReferenceResource {
 
     /***********************    初始化 star       ***********************/
     /**
-     * 初始化MappedFile,使用transientStorePool
+     * 初始化MappedFile,使用transientStorePool(堆外内存池)
      */
     public void init(final String fileName, final int fileSize,
                      final TransientStorePool transientStorePool) throws IOException {
