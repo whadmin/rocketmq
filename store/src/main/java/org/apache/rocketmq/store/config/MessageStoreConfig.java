@@ -177,8 +177,15 @@ public class MessageStoreConfig {
     private long osPageCacheBusyTimeOutMills = 1000;
     private int defaultQueryMaxNum = 32;
 
+    /**
+     * 是否启动启用了临时堆外缓冲区池
+     */
     @ImportantField
     private boolean transientStorePoolEnable = false;
+
+    /**
+     * 堆外缓冲区池大小，需要启动临时堆外缓冲区池
+     */
     private int transientStorePoolSize = 5;
     private boolean fastFailIfNoBufferInStorePool = false;
 

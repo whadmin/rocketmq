@@ -31,35 +31,41 @@ import sun.nio.ch.DirectBuffer;
 public class TransientStorePool {
     private static final Logger log = LoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
 
+    //池大小
     private final int poolSize;
+    //池中推外缓冲区大小
     private final int fileSize;
+    //池中推外缓冲区队列
     private final Deque<ByteBuffer> availableBuffers;
+    //消息持久化配置
     private final MessageStoreConfig storeConfig;
 
     public TransientStorePool(final MessageStoreConfig storeConfig) {
+        //设置消息持久化配置
         this.storeConfig = storeConfig;
+        //设置池大小
         this.poolSize = storeConfig.getTransientStorePoolSize();
+        //设置池中推外缓冲区大小
         this.fileSize = storeConfig.getMapedFileSizeCommitLog();
+        //初始化池中推外缓冲区队列
         this.availableBuffers = new ConcurrentLinkedDeque<>();
     }
 
     /**
-     *初始化函数，分配poolSize个fileSize的堆外空间
+     *初始化堆外缓存池
      */
     public void init() {
         for (int i = 0; i < poolSize; i++) {
             ByteBuffer byteBuffer = ByteBuffer.allocateDirect(fileSize);
-
             final long address = ((DirectBuffer) byteBuffer).address();
             Pointer pointer = new Pointer(address);
             LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize));
-
             availableBuffers.offer(byteBuffer);
         }
     }
 
     /**
-     * 销毁availableBuffers中所有buffer数据
+     * 销毁堆外缓存池
      *
      */
     public void destroy() {
@@ -71,7 +77,7 @@ public class TransientStorePool {
     }
 
     /**
-     * 用完了之后,返还一个buffer,对buffer数据进行清理
+     * 归还一个堆外缓存区给堆外缓冲区池
      * @param byteBuffer
      */
     public void returnBuffer(ByteBuffer byteBuffer) {
@@ -81,7 +87,7 @@ public class TransientStorePool {
     }
 
     /**
-     * 借一个buffer出去
+     * 借一堆外缓存区从堆外缓冲区池
      * @return
      */
     public ByteBuffer borrowBuffer() {
@@ -93,7 +99,7 @@ public class TransientStorePool {
     }
 
     /**
-     * 剩余可用的buffers数量
+     * 剩余可用的堆外缓冲区数量
      * @return
      */
     public int remainBufferNumbs() {

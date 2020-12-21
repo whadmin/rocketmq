@@ -28,7 +28,7 @@ public class AppendMessageResult {
     private int wroteBytes;
     // 写入消息 ID
     private String msgId;
-    // 写入消息
+    // 写入消息时间
     private long storeTimestamp;
     // 逻辑地址，代表是这个队列中的第几个位置
     private long logicsOffset;
